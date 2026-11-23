@@ -1,0 +1,52 @@
+---
+description: "AKS / Kubernetes / Helm — Steering"
+alwaysApply: true
+---
+# AKS / Kubernetes / Helm — Steering
+
+## Alcance
+
+Objetos internos de Kubernetes y Helm en los clusters AKS de Grupo Montecristo: namespaces, deployments, pods, services, configmaps, secrets (listar, no revelar), HPA, ingress, PVC, RBAC de Kubernetes, charts Helm, actualizaciones de imágenes.
+
+> El recurso AKS a nivel de Azure (clúster/node pools) es dominio `azure` (ARM), no este.
+
+## Clusters disponibles (kubeconfig en `~/.kube/config`)
+
+| Contexto | Tipo | Estado |
+|---|---|---|
+| `k3s-dev` | k3s desarrollo | Activo (`172.16.2.43:6443`) |
+| `gmon-prod-aks-eastus2-0001` | AKS privado prod | Activo |
+| `gmon-prod-aks-eastus2-0004` | AKS privado prod | Activo |
+| `gmon-dev-aks-eastus2-0001` | AKS privado dev | Apagado |
+| `gmon-qa-aks-eastus2-0001/0002` | AKS privado QA | Apagados |
+
+Siempre confirmar el contexto activo con `kubectl config current-context` antes de operar. **Nunca asumir que un contexto o namespace citado en docs está vigente.**
+
+## Conexión — MCP aks
+
+- Binario: `$REPO_ROOT/.local/aks/tools/aks-mcp/v0.0.20/aks-mcp`
+- Configurado en `.cursor/mcp.json` como servidor `aks` (stdio).
+- Para operaciones administrativas: `--access-level admin`.
+
+## Flujo de operaciones
+
+```
+Test-AksEnvironment.ps1 → Get-AksInventory.ps1 → Invoke-AksRead.ps1 →
+New-AksChangePlan.ps1 → Test-AksChangePlan.ps1 → [aprobación] → Apply-AksChangePlan.ps1
+```
+
+- **Una sola aprobación** cubre el plan completo no destructivo (actualizaciones de imagen, escala, reconfiguración), identificado por su hash.
+- Eliminaciones (`kubectl delete`, purge de Helm) exigen aprobación separada.
+- `Test-AksDeploymentCapacity.ps1` — verificar capacidad antes de cualquier despliegue.
+- Los clusters de producción (`gmon-prod-*`) requieren especial atención: enunciar explícitamente que se está en prod antes de aplicar.
+
+## Seguridad
+
+- Nunca copiar un kubeconfig al repositorio.
+- Nunca ejecutar `kubectl auth reconcile` en modo no-readonly.
+- Preferir namespaces específicos en todos los comandos; evitar `-A` (all-namespaces) salvo inventario.
+
+## Fuentes de verdad
+
+- Skill: `.cursor/skills/manage-aks-clusters/SKILL.md`
+- Docs: `docs/aks/` (si existe)

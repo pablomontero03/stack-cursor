@@ -1,0 +1,64 @@
+---
+description: "Azure DevOps — Steering (Pipelines + Permissions)"
+alwaysApply: true
+---
+# Azure DevOps — Steering (Pipelines + Permissions)
+
+## Dominio Pipelines
+
+**Organización:** `Shared-Service-GM` | **Proyecto de pipelines:** `DevOps`
+
+Cubre pipelines clásicos y YAML. Dos familias que **nunca se mezclan**:
+- **AKS** (`Deployment-Azur-Aks-v3`): apps → AKS (Docker), Library por app.
+- **DACPAC** (`Deployment-DataBases`): bases de datos, Library compartida `Bases Datos SQL`.
+
+### Conexión
+
+- **Primera opción:** MCP oficial `azure-devops` (`@azure-devops/mcp@2.9.0`), configurado en `.cursor/mcp.json`.
+- **Fallback GET-only:** `scripts/Get-AdoClassicVariables.ps1` con PAT (solo lectura de variables clásicas).
+- `Invoke-AdoRest.ps1` — nunca se invoca directo; solo vía los scripts autorizados o `Apply-AdoClassicPlan.ps1`.
+- PAT: `$env:AZURE_DEVOPS_PAT` (de `env/.env`). Nunca se imprime ni devuelve.
+
+### Flujo
+
+```
+Export-AdoClassicInventory.ps1 → New-Ado*Plan.ps1 → Test-AdoPlan.ps1 → [aprobación] → Apply-AdoClassicPlan.ps1
+```
+
+- El agente preparatorio `ado-pipeline-builder` genera planes, bodies y hashes pero **nunca ejecuta Apply**.
+- La **sesión principal** es la única que presenta el plan final, ejecuta `Apply-AdoClassicPlan.ps1` y verifica el resultado.
+- Una sola aprobación puede cubrir la configuración completa de un pipeline (Libraries + definiciones Build/Release). Pero cada uno de estos exige aprobación separada: encolar un Build, crear/ejecutar un Release real, desplegar a Producción, aplicar un DACPAC en `Apply`, borrar recursos, modificar permisos compartidos.
+- El flujo autorizado de git: push a `main` + PR `main` → `release`, sin autocomplete.
+
+## Dominio Permissions
+
+Administra grupos de seguridad (`Development Team`, `Development Teams`, `Code-Reviewers`), membresías y permisos Git (nodo `All Repositories`, ramas: `feature/*`, `development`, `uat`, `release`, `main`) en proyectos de `Shared-Service-GM`.
+
+**Separado de Pipelines** — no comparte scripts, hooks, agentes ni datos transitorios con él.
+
+### Conexión
+
+- MCP `azure-devops` para inventario (proyectos/repos/ramas).
+- `Invoke-AdoPermissionsRest.ps1` para Graph Groups, Graph Memberships, Security ACL/Namespaces (que el MCP no expone).
+
+### Flujo
+
+```
+Export-AdoPermissionsInventory.ps1 → New-AdoPermissionsPlan.ps1 → [aprobación] → Apply-AdoPermissionsPlan.ps1
+```
+
+- Una sola aprobación cubre el plan no destructivo completo (crear grupos faltantes, agregar miembros, fijar permisos Git), identificado por `validationHash`.
+- `Apply-AdoPermissionsPlan.ps1` **rechaza siempre** cualquier operación destructiva.
+- Toda eliminación (grupo o membresía) exige aprobación separada: `Apply-AdoPermissionsDeletePlan.ps1`, con respaldo de solo lectura previo.
+- `$env:AZURE_DEVOPS_PAT` es compartido con el dominio Pipelines a propósito.
+
+## Reglas comunes
+
+- Nunca asumir vigente ningún id, repo, branch, pool, service connection, task group o cluster — confirmar contra el inventario en vivo.
+- No completar, aprobar ni abandonar un PR automáticamente.
+- No exponer el PAT ni valores de propiedades sensibles del plan (usar `***REDACTED***` o `${VAR}`).
+
+## Fuentes de verdad
+
+- Skills: `.cursor/skills/manage-azure-devops-pipelines/SKILL.md`, `.cursor/skills/manage-azure-devops-permissions/SKILL.md`
+- Docs: `docs/azure-devops/PIPELINE-AUTOMATION-ARCHITECTURE.md`, `docs/azure-devops-permissions/PERMISSIONS-AUTOMATION-ARCHITECTURE.md`

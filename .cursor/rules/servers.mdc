@@ -1,0 +1,35 @@
+---
+description: "Servidores Linux y Windows — Steering"
+alwaysApply: true
+---
+# Servidores Linux y Windows — Steering
+
+## Catálogos
+
+- **Linux:** `docs/servers/servers.json`
+- **Windows:** `docs/servers/windows/servers.json`
+
+Nunca asumir que las IPs, usuarios o rutas están vigentes — confirmar contra el catálogo antes de operar.
+
+## Servidores Linux (referencia)
+
+| Servidor | IP | Usuario | Propósito |
+|---|---|---|---|
+| srv-desarrollo-5 | `172.16.2.43` | administrator | k3s dev (contexto `k3s-dev`) |
+| SRV-SFTP-TS (n8n) | `172.16.2.60` | soporte | n8n interno + SFTP |
+| adm01 | `172.16.2.31` | adm01 | Administración |
+| srv-127 | `172.16.2.127` | administrator | — |
+| ADO admin | `10.1.0.200` | adoadmin | Azure DevOps on-prem |
+| OpenEdX | `135.119.204.153` | adminedx | OpenEdX (clave `.pem`) |
+
+Credenciales en `$REPO_ROOT/env/.env`. Las claves SSH en `$REPO_ROOT/env/` (no versionadas).
+
+## Operaciones
+
+- Los agentes `linux-server-diagnoser` y `linux-server-reviewer` operan sobre salidas ya obtenidas, no ejecutan comandos directamente en los servidores.
+- Los agentes `windows-server-diagnoser` y `windows-server-reviewer` igual.
+- Para ejecutar comandos en servidores: el agente pide aprobación y el usuario los corre manualmente, o se usa SSH via `execute_bash` con aprobación explícita.
+
+## Fuentes de verdad
+
+- Skills: `.cursor/skills/manage-linux-servers/SKILL.md`, `.cursor/skills/manage-windows-servers/SKILL.md`

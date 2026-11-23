@@ -1,0 +1,38 @@
+---
+description: "n8n — Steering (Monitoreo SQL + MAIA)"
+alwaysApply: true
+---
+# n8n — Steering (Monitoreo SQL + MAIA)
+
+## Dos instancias distintas — no confundir
+
+| MCP | Instancia | Uso |
+|---|---|---|
+| `n8n-interno` | `http://172.16.2.60:5678` | Schema Sync **y** Monitoreo SQL (interno del departamento) |
+| `n8n-productivo` | `https://automation.grupomontecristo.com` | Plataforma productiva — incluye `AIA-CC-MAIA-Chat` (MAIA) y demás workflows de negocio |
+
+**Cómo elegir el MCP correcto:**
+1. Vocabulario: monitoreo SQL, instancias UAT/Prod de SQL Server, clonar pack de monitores → `n8n-interno`. `AIA-CC-MAIA-Chat`, embeddings/chat model MAIA, agentes conversacionales, citas, cotizadores, RAG, prefijos `PP-CC-`/`MAA-` → `n8n-productivo`.
+2. ID de workflow conocido en una instancia.
+3. Instrucción explícita del usuario.
+
+Si la instancia sigue sin quedar clara → **preguntar antes de ejecutar cualquier operación**, incluso de solo lectura.
+
+## Reglas críticas
+
+- Todas las operaciones contra cualquier instancia n8n pasan por su MCP correspondiente. Si el MCP no alcanza para algo, **detenerse y consultar** — no usar la API cruda como sustituto.
+- Las bases SQL monitoreadas son **estrictamente solo lectura** (SELECT/SP). Nunca escribir en ellas desde este flujo.
+- `n8n-productivo`: tratar como solo lectura por defecto hasta que el alcance operativo esté documentado; pedir aprobación explícita antes de cualquier escritura.
+
+## Operaciones de n8n
+
+- **Sin aprobación:** listar workflows, obtener definición, ver ejecuciones, `healthz`.
+- **Con aprobación:** crear, modificar, eliminar, activar/desactivar, retry — cada acción por separado.
+- Nunca activar un pack de monitoreo recién clonado "por defecto"; activar requiere aprobación separada de la de crearlo.
+- Nunca reducir el schedule de un workflow de producción a un intervalo de prueba sin ventana controlada y aprobación.
+- Nunca asumir tamaño fijo de un pack al clonar: listar dinámicamente los workflows de la carpeta/etiqueta origen.
+
+## Fuentes de verdad
+
+- Skill: `.cursor/skills/manage-n8n-monitoring/SKILL.md`
+- Docs: `docs/n8n-monitoring/N8N-API-RUNBOOK.md`, `CLONE-INSTANCIA-SQL.md`, `MAIA-timeouts-recomendados.md`

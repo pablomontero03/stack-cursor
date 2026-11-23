@@ -1,0 +1,48 @@
+---
+description: "Schema Sync + SSDT — Steering"
+alwaysApply: true
+---
+# Schema Sync + SSDT — Steering
+
+## Alcance
+
+Sincronización de esquemas de bases de datos SQL → repositorios SSDT. Cubre `schema-sync/`, proyectos SSDT referenciados, definiciones n8n de Schema Sync (instancia `n8n-interno`), y cualquier tarea relacionada con Schema Sync.
+
+## Regla de oro (SQL)
+
+Igual que en el archivo global: toda BD es solo lectura desde este flujo. Solo se permite `SqlPackage /Action:Extract` con `ApplicationIntent=ReadOnly`. Nunca `Publish`, `Deploy` ni escritura SQL.
+
+## Operaciones
+
+- **Sin aprobación:** leer archivos del repo, `databases.json`, resultados JSON y logs; consultar n8n sin ejecutar; validar JSON/PowerShell/.NET; preparar planes y dry-runs; diagnosticar; consultar SQL con herramientas aprobadas de solo lectura.
+- **Con aprobación (cada acción por separado):** ejecutar Schema Sync para una BD exacta; ejecutar/clonar un workflow n8n; commit o push; crear/reutilizar un PR; habilitar entrada en `databases.json`; importar o activar workflow n8n; cambiar schedule; desplegar SchemaSyncTool; crear cascarón SSDT; importar esquema hacia SSDT; primera corrida piloto.
+
+## Reglas de operación
+
+- Una sola BD por vez. Confirmar el nombre real antes de ejecutar.
+- `schema-sync/databases.json` es la fuente de verdad del catálogo — no asumir que `database`, `repoName` y `projectName` son iguales.
+- No ejecutar `run-batch.sh --execute` salvo solicitud explícita.
+- No ejecutar `ScHmSyNcOrCh0001` salvo solicitud explícita, dry-run previo y aprobación separada de alto riesgo.
+- No habilitar schedules ni workflows automáticamente.
+
+## Orquestador multi-BD `ScHmSyNcOrCh0001`
+
+- Solo lectura por defecto, `do_not_auto_run=true`.
+- Requiere: solicitud específica, lista exacta de bases, dry-run previo, y aprobación separada de alto riesgo.
+- No se ejecuta como efecto colateral de aprobar una sola BD.
+
+## Bases nuevas y cascarón SSDT
+
+- Crear cascarón SSDT solo si el repo está vacío (sin `.sqlproj`, `.slnx`, `build-dacpac.ps1`).
+- `ProjectGuid` nuevo, nunca copiado de plantilla.
+- Compilar con cero errores antes de importar el esquema.
+- Para bases grandes: preferir `Source=DACPAC` + `Target=proyecto vacío`.
+- No crear workflow n8n ni habilitar `databases.json` hasta que el proyecto compile y el import esté validado.
+- No versionar `bin/`, `obj/`, `out/` o archivos DACPAC.
+
+## Fuentes de verdad
+
+- Catálogo: `schema-sync/databases.json`
+- Cotidiano: `schema-sync/README.md`
+- Historia: `schema-sync/CONTEXTO-COMPLETO.md`
+- Skill: `.cursor/skills/manage-schema-sync-ssdt/SKILL.md`

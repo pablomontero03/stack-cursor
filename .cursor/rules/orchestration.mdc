@@ -1,0 +1,30 @@
+---
+description: "Orchestrate Application Pipeline Cycle — Steering"
+alwaysApply: true
+---
+# Orchestrate Application Pipeline Cycle — Steering
+
+## Cuándo se activa
+
+**Solo** cuando una solicitud de creación/validación integral de un pipeline de aplicación cruza **2 o más dominios** de: Azure DevOps clásico, Cloudflare DNS, análisis de código/ramas, Kubernetes/AKS, y ejecución Desarrollo/UAT con preparación de Producción.
+
+Para una consulta aislada de un solo dominio → ir directo a su skill (`manage-azure-devops-pipelines`, `manage-cloudflare`, `manage-aks-clusters`). **Nunca activar este skill para un solo dominio.**
+
+## Qué hace
+
+No implementa procedimientos técnicos propios ni introduce una vía de escritura nueva. Orquesta:
+1. Descubrimiento paralelo de los recursos de cada dominio involucrado.
+2. Consolidación en un único plan multi-dominio.
+3. Delegación de toda escritura real a los `Apply-*` ya existentes de cada dominio, cada uno con sus propias reglas de seguridad sin cambios.
+
+## Aprobaciones
+
+- Una sola aprobación puede cubrir el plan no productivo completo, aunque cruce varios dominios.
+- **Producción y toda eliminación siempre requieren aprobación separada**, sin excepción aunque involucren varios dominios simultáneamente.
+- Nunca modifica código de la aplicación; un fallo de código se reporta con evidencia, nunca se corrige automáticamente.
+
+## Fuentes de verdad
+
+- Skill: `.cursor/skills/orchestrate-application-pipeline-cycle/SKILL.md`
+- Referencias: `input-contract.md`, `orchestration-flow.md`, `approval-envelope.md`, `status-timing-and-memory.md`
+- Plantilla ligera: `docs/PLANTILLA-CICLO-CREACION-PIPELINE-APLICACION-LIGERA.md`

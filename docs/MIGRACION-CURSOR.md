@@ -35,13 +35,23 @@ Al cerrar una fase: marcar las casillas, anotar la fecha en el registro y dejar 
 
 ### Fase 3 — Rules y skills
 
-El texto de cada steering y de cada `SKILL.md` se conserva. Los `triggers` de Kiro se suman al `description` de Cursor, que es lo que activa la skill. No se reemplaza el procedimiento.
+El texto de cada steering y de cada `SKILL.md` se conserva. Los `triggers` de Kiro se suman al `description` de Cursor y también se dejan en el frontmatter. No se reemplaza el procedimiento.
 
-- [ ] Al crear rules y skills, sustituir solo rutas (`.kiro/` → `.cursor/`, raíz vieja → esta carpeta). No reescribir la instrucción.
-- [ ] 9 steering `always` → `.cursor/rules/*.mdc` con `alwaysApply: true`
-- [ ] `ado-task-logging-workflow.md` (`inclusion: manual`) → regla bajo demanda, mismo texto
-- [ ] 11 skills de dominio, cada una con `references/`, `assets/` y `scripts/` íntegros
-- [ ] Decidir el porte de `skill-creator` (su propósito queda registrado; Cursor ya sabe crear skills, el procedimiento de evals de Kiro no se tira sin dejar constancia)
+- [x] Sustituir solo rutas de archivos que existen y se están moviendo. El resto de la instrucción queda igual.
+- [x] 9 steering `always` → `.cursor/rules/*.mdc` con `alwaysApply: true`. El cuerpo es el original.
+- [x] `ado-task-logging-workflow.md` → `.cursor/rules/ado-task-logging-workflow.mdc` con `alwaysApply: false` y el mismo texto.
+- [x] 11 skills de dominio en `.cursor/skills/`, con `references/`, `assets/` y `scripts/` íntegros (161 archivos en total, incluido `skill-creator`).
+- [x] `skill-creator` se portó completo. No se descartó el procedimiento de evals.
+
+Rutas que sí se actualizaron, porque el archivo existe o va a existir en la fase 4 con ese nombre:
+
+- `.kiro/skills/` → `.cursor/skills/`
+- `.kiro/settings/mcp.json` → `.cursor/mcp.json`
+- `.kiro/agent-memory/` → `.cursor/memories/`
+- `/home/kiro/proyectos/repositorios/automation-kiro` → `/home/cursor/stack-cursor`
+- Citas a subagentes (`.kiro/agents/<dominio>/<nombre>.md`) → `.cursor/agents/<nombre>.md`, que es donde la fase 4 escribe el prompt original.
+
+Rutas que se dejaron escritas igual a propósito: `.kiro/steering/<dominio>/security.md`, `.kiro/steering/<dominio>/authorization.md`, `.kiro/rules/<dominio>/authorization.md` y `.kiro/hooks/azure/*.ps1`. Esos archivos no existen en Kiro. Inventarlos habría sido escribir reglas nuevas. El texto operativo está en el `SKILL.md`, en `references/` y en el steering plano que ya quedó como rule.
 
 ### Fase 4 — Subagentes y memoria
 
@@ -100,6 +110,14 @@ Se copió `docs/` (42 archivos), `schema-sync/` (3 archivos) y los cinco archivo
 No se parafraseó ningún procedimiento. Las rutas `.kiro/` siguen escritas igual, a propósito, hasta que existan los archivos de Cursor.
 
 Excepción de seguridad: `docs/azure-devops/Build-modelo-backend.json` traía credenciales en claro (18 valores, repetidos en tres bloques). Esos valores quedaron como `${REDACTED}`. Los nombres de variable no se tocaron. Conviene rotar esas credenciales porque siguen en el historial de `automation-kiro`.
+
+### 2026-11-23 — Fase 3
+
+10 rules en `.cursor/rules/` y 12 skills en `.cursor/skills/` (161 archivos). El cuerpo de cada steering y de cada skill, incluidos scripts, references y assets, es el de Kiro. En el frontmatter de cada skill se conservaron `triggers` y `always`, y los triggers se añadieron al final del `description` para que Cursor pueda activarla.
+
+No se reescribieron procedimientos. La revisión de secretos en las skills encontró solo valores de prueba (`DUMMY-...`, `FAKE_TEST_...`, fixtures). Se dejaron, porque forman parte de los tests.
+
+`automation-kiro` no se modificó.
 
 ## Mapa de porte (todavía no ejecutado)
 

@@ -1,0 +1,114 @@
+---
+description: "Al terminar un trabajo, crear la Task de Azure DevOps y la accion que el workflow define junto con ella. Usar cuando el usuario da el trabajo por cerrado."
+alwaysApply: false
+---
+# ADO Task Logging Workflow — al terminar un trabajo
+
+Workflow permanente (establecido 2026-08-25, ampliado 2026-09-01;
+portado a KiroCrew/Linux 2026-09-10). Cuando el usuario da por terminado
+un trabajo, se disparan **dos acciones juntas**, no solo la Task.
+
+> Portado desde la memoria que el usuario tenía con Claude
+> (`ado-task-logging-workflow.md`). Vive aquí, en el repo versionado
+> `automation-kiro`, para quedar bajo control de versiones (no en la
+> memoria global del agente). Se adaptó al entorno Linux/WSL de este
+> stack: NO aplican los gotchas de Windows del original (dubious
+> ownership, `git -c safe.directory`, `powershell.exe`, rutas
+> `D:\Proyectos`, `token.txt`).
+
+## Trigger
+
+El usuario dice algo como "ya terminamos con esto" / "demos por
+terminado este trabajo" y quiere cerrarlo. Desde 2026-09-01 esto
+SIEMPRE significa dos cosas juntas:
+
+1. **Crear la Task en Azure DevOps** (ver plantilla y datos fijos abajo).
+2. **Subir los cambios pendientes del repo tocado** en la sesión
+   (`git add` de los archivos relevantes → commit → `git push` a la rama
+   del feature/PR correspondiente). Instrucción explícita del usuario
+   2026-09-01: "de ahora en adelante cuando demos por terminado además de
+   crear la tarea subir los cambios al repo." Confirmar remote/branch con
+   `git remote -v` / `git status`, no asumir.
+
+La Task y el push son **dos acciones independientes**: si una no aplica
+(p. ej. no se tocó ningún repo), la otra igual se hace.
+
+## Acción 1 — crear la Task en la HU
+
+**Datos fijos (iguales siempre):**
+- **Proyecto:** `Database-Administration-and-Monitoring`
+  (id `a666d3bc-9d75-4f3b-9925-ce0147fd2250`, org `Shared-Service-GM`) —
+  verificado en vivo 2026-09-10. **Es un proyecto DISTINTO** de `DevOps`
+  (pipelines clásicos) y de `Buklo` (código de apps): las Task de
+  registro de trabajo van acá, no en esos. No confundir los scopes.
+- **Assigned To:** `pmontero@grupomontecristo.com`.
+- **Herramienta:** el MCP oficial `azure-devops`
+  (`wit_work_item_write`), acción `add_child` para crear y enlazar a la
+  User Story padre en una sola llamada, y luego `update` para
+  `System.AssignedTo`, `Microsoft.VSTS.Scheduling.CompletedWork` y
+  `Microsoft.VSTS.Scheduling.RemainingWork`. **Nunca** se necesita el PAT
+  para esto — el MCP hace el CRUD de work items directo.
+
+**SIEMPRE preguntar bajo qué User Story (parent) va la Task.** La
+historia tipo "tareas varias / Registro de Actividades Transversales" es
+un bucket genérico del Project Manager que **se rota/re-crea cada
+semana** — nunca asumir ni reutilizar un número de una sesión anterior
+ni de antes en la misma sesión. Re-verificar además `System.State` de la
+historia (una recordada puede estar cerrada). Este es el único dato de
+la plantilla que el usuario NO quiere auto-decidido.
+
+**Mapeo de campos (Agile process, este proyecto — la Task no tiene campo
+propio de Acceptance Criteria; va en la descripción):**
+- `System.Title` — título, formato `[Componente/Acción] + descripción breve`.
+- `System.Description` (HTML) — con secciones `<h3>`/`<ul>`:
+  **Análisis/Diagnóstico** + **Solución Implementada** + **Criterios de
+  Aceptación**.
+- `System.AssignedTo` — set en un `update` posterior (add_child NO lo
+  setea solo).
+- `Microsoft.VSTS.Scheduling.CompletedWork` / `RemainingWork` — horas
+  numéricas estimadas según el alcance real; para una task completada,
+  RemainingWork normalmente 0.
+- `System.Parent` — queda seteado automáticamente por `add_child` con el
+  parentId.
+
+**Cómo aplicar:** (1) redactar el contenido completo de la Task (título,
+descripción con las 3 secciones, horas estimadas) y mostrarlo para
+aprobación antes de escribir nada; (2) pedir la User Story padre si no
+se dio; (3) verificar en vivo, read-only, que el proyecto y la User
+Story existen (`core_list_projects`, `wit_work_item get`) — nunca asumir
+un id vigente; (4) crear con `add_child`, luego `update` para
+AssignedTo/horas; (5) reportar el Task ID/URL real al usuario.
+
+## Acción 2 — subir los cambios del repo
+
+Sobre el repo que la sesión realmente tocó (aquí:
+`/home/cursor/stack-cursor`, o el que
+corresponda — confirmar con `git remote -v`/`git status`).
+
+**Escaneo de secretos OBLIGATORIO antes de `git add`** (no opcional
+aunque el usuario diga "subí todo"): el `.gitignore` de este repo por
+decisión del propietario no excluye `.local/` ni `env/`, así que la
+única red de seguridad es este escaneo manual. Buscar en los archivos
+modificados+untracked valores reales de `password`/`token`/`pat`/
+`secret`/`apiKey`/`connectionString`, headers de clave privada, y
+`Authorization: Bearer/Basic` con valor literal. Fixtures con valores
+obviamente falsos son OK; un valor real → detenerse y preguntar.
+
+Reglas git de este stack (del steering global y de KiroCrew):
+- No `git push` a ramas protegidas (main/master) salvo autorización
+  explícita; push a rama de feature con el nombre explícito
+  (`git push origin <feature-branch>`).
+- Nunca force-push, nunca tocar `git config`, nunca `--amend` de commits
+  ya pusheados.
+- Commit descriptivo; revisar `git status` tras un `add` amplio.
+- (2026-09-10) El flujo autorizado del proyecto: push a `main` + PR
+  `main` → `release`, sin autocomplete — no completar/aprobar/abandonar
+  un PR automáticamente.
+
+## Precedentes
+
+- Task 28802 "[ADO Pipelines] Automatizar convención de agrupación de
+  merges…" bajo Story 22244, 6h/0h (2026-08-25).
+- Task 31182 bajo Story 31181 (22244 ya había cerrado — re-verificar el
+  estado, no reutilizar un número recordado) + commit `733aec1`
+  (2026-09-01, primera vez Task + push juntos).

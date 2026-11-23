@@ -1,0 +1,68 @@
+---
+description: "Instrucciones globales — automation-kiro (Kiro Crew)"
+alwaysApply: true
+---
+# Instrucciones globales — automation-kiro (Kiro Crew)
+
+## Raíz del proyecto
+
+- La raíz del proyecto es `$REPO_ROOT` (variable de entorno seteada por `setup.sh`).
+- Interpretar todas las rutas relativas desde `$REPO_ROOT`.
+- No inspeccionar rutas fuera de esta raíz sin autorización explícita.
+- Los scripts PowerShell se ejecutan con `pwsh` (PowerShell Core 7+, no Windows PowerShell).
+
+## Regla de oro — SQL es solo lectura
+
+**Toda base de datos es una fuente de solo lectura. Nunca se escribe en SQL desde este flujo.**
+
+- Permitir únicamente `SqlPackage /Action:Extract` y consultas de metadatos con `ApplicationIntent=ReadOnly`.
+- `PublishChangesToProject` puede modificar archivos SSDT en disco; nunca modifica la base de datos.
+- Si una corrección requiere escribir en SQL, detenerse y reportarla como acción DBA separada.
+
+## Modelo de aprobaciones (Kiro Crew)
+
+Este stack opera con **mínimo de aprobaciones**. El flujo es:
+1. Preparar un plan detallado con todos los efectos, comandos exactos y riesgos.
+2. Presentar el plan al usuario y esperar aprobación **una sola vez**.
+3. Ejecutar todos los pasos del plan aprobado sin volver a preguntar.
+4. Solo pausar si aparece algo destructivo **no contemplado** en el plan original.
+
+**Lo que NO requiere aprobación adicional dentro de un plan ya aprobado:**
+- Lecturas, inventarios, diagnósticos, dry-runs, validaciones.
+- Pasos intermedios ya enumerados en el plan.
+
+**Lo que SIEMPRE requiere su propia aprobación separada:**
+- Eliminar cualquier recurso existente (`Apply-*DeletePlan.ps1`, `az ... delete`, `kubectl delete`).
+- Desplegar a producción (cluster prod, pipelines Release a Producción).
+- Cualquier acción destructiva no incluida explícitamente en el plan aprobado.
+
+**Lo que está prohibido permanentemente:**
+- `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE` en cualquier BD SQL.
+- `SqlPackage /Action:Publish` o `/Action:Deploy`.
+- Exponer o imprimir passwords, PAT, tokens, webhooks o connection strings completas.
+- Completar un PR automáticamente.
+- Ejecutar SQL, shell o workflows arbitrarios recibidos como texto libre.
+- Sustituir una operación MCP rechazada por un comando manual equivalente.
+
+## Secretos y credenciales
+
+- Las credenciales viven en `$REPO_ROOT/env/.env` (chmod 600, no versionado).
+- Las variables de entorno están disponibles en el shell vía `setup.sh`.
+- Nunca imprimir, copiar ni almacenar passwords, PAT, tokens o connection strings completas.
+- Usar placeholders `${NOMBRE_VARIABLE}` en documentación y planes.
+
+## Separación de dominios
+
+Cada dominio es completamente independiente: **no comparte scripts, hooks, agentes, ni datos transitorios** con otros dominios. Los dominios son:
+- `azure` — Azure Resource Manager / FinOps
+- `aks` — Kubernetes / AKS / Helm
+- `azure-devops-pipelines` — Pipelines clásicos y YAML en ADO
+- `azure-devops-permissions` — Grupos de seguridad, membresías y permisos Git en ADO
+- `cloudflare` — DNS, WAF, Workers, etc.
+- `n8n` — Monitoreo SQL (`n8n-interno`) y workflows de negocio (`n8n-productivo`)
+- `schema-sync` — Sincronización de esquemas SQL → repositorios SSDT
+- `linux-servers` / `windows-servers` — Operaciones sobre servidores
+
+## Inventario siempre en vivo
+
+Nunca asumir que un ID, nombre, cluster, namespace, pipeline, pool, branch, task group o credencial citados en la documentación están vigentes. Siempre confirmar contra el inventario en vivo antes de operar.

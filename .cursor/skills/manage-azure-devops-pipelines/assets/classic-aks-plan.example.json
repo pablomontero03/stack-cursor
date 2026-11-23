@@ -1,0 +1,83 @@
+{
+  "family": "aks",
+  "generatedAtUtc": "2026-01-01T00:00:00.0000000Z",
+  "organization": "Shared-Service-GM",
+  "project": "DevOps",
+  "validated": false,
+  "names": {
+    "build": "Build-Ejemplo-Api-Demo",
+    "release": "Deploy-Desarrollo-UAT-Produccion-Ejemplo-Api-Demo",
+    "variableGroup": "Produccion-Ejemplo-Api-Demo",
+    "folder": "\\Ejemplo"
+  },
+  "repo": {
+    "name": "project_ejemplo_api_demo",
+    "prodBranch": "release",
+    "pathFilter": "+/**"
+  },
+  "dockerfile": {
+    "path": "./Dockerfile",
+    "rutadockerfile": "./Dockerfile",
+    "generatedByFileCreator": false,
+    "isMonorepo": false
+  },
+  "buildVariables": {
+    "appname": "ejemplo-api-demo",
+    "image": "ejemplo-api-demo-",
+    "rutadockerfile": "./Dockerfile",
+    "conexcontainerregistries": "ACR Hub-2",
+    "tag": "$(Build.BuildId)",
+    "system.debug": "false"
+  },
+  "dependencies": {
+    "buildTaskGroup": { "name": "Build-MultiStage", "id": null, "revision": null },
+    "deployTaskGroup": { "name": "Deployment-Azur-Aks-v3", "id": null, "revision": null },
+    "serviceConnectionAcr": { "name": "ACR Hub-2", "id": null },
+    "serviceConnectionAks": { "name": "AKS-PROD-SVC", "id": null },
+    "agentPool": { "name": null, "id": null },
+    "evaluarVentanaTaskGroup": { "name": "Evaluar-ventana-agrupacion", "id": null },
+    "ganaElMasNuevoTaskGroup": { "name": "Gana-el-mas-nuevo", "id": null },
+    "reportarResultadoTaskGroup": { "name": "Reportar-resultado-HU", "id": null }
+  },
+  "mergeBatching": { "enabled": true, "windowMinutes": "5" },
+  "variableGroup": {
+    "name": "Produccion-Ejemplo-Api-Demo",
+    "keys": {
+      "ambiente": "prod",
+      "containerregistries": "gmonhubacreastus20001.azurecr.io",
+      "conexcontainerregistries": "ACR Hub-2",
+      "conexkubernetes": "AKS-PROD-SVC",
+      "namespace": "application-services",
+      "aksClusterName": "CHANGE_ME_confirmar_en_vivo",
+      "aksResourceGroup": "gmon_prod_rg_eastus2_0001",
+      "tag": "$(Build.BuildId)",
+      "reqcpu": "75",
+      "reqmem": "128",
+      "limcpu": "300",
+      "limmem": "300",
+      "servicesname": "ejemplo-api-demo",
+      "image": "ejemplo-api-demo",
+      "pipeline": "Build-Ejemplo-Api-Demo",
+      "rutadockerfile": "./Dockerfile"
+    }
+  },
+  "release": {
+    "artifactAlias": "_Build-Ejemplo-Api-Demo",
+    "cdTriggerEnabled": true,
+    "stage": "Produccion",
+    "deployTaskGroup": "Deployment-Azur-Aks-v3",
+    "artifactFilterBranch": "release",
+    "agentPool": null,
+    "reportarResultadoHU": true
+  },
+  "approvedOperations": [],
+  "validationEvidence": null,
+  "notes": [
+    "Ejemplo sanitizado, no operativo. aksClusterName queda como placeholder deliberado para que Test-AdoClassicPlan.ps1 lo bloquee si se usa tal cual.",
+    "Dev/UAT quedan fuera de este plan salvo que se generen explicitamente.",
+    "dependencies.*.id/revision quedan null a proposito: los resuelve Test-AdoClassicPlan.ps1 contra un -InventoryPath real, nunca se inventan aqui.",
+    "approvedOperations vacio a proposito: los payloads de Build/Release clasico no estan confirmados todavia, asi que ninguna escritura puede aprobarse aun.",
+    "validationEvidence queda null porque este ejemplo nunca paso por Test-AdoClassicPlan.ps1 con un -InventoryPath real; se completa (inventoryGeneratedAtUtc/inventoryHash/validatedAtUtc/maxInventoryAgeHours) recien cuando el plan queda validated=true contra un inventario fresco.",
+    "Actualizado 2026-08-26: buildTaskGroup=Build-MultiStage y mergeBatching=true son el default vigente desde 2026-08-25 (ver references/ado-classic-payload-templates.md); buildVariables.image debe terminar en guion. -DisableMergeBatching y/o buildTaskGroup=Build son la excepcion, no el default, y deben pedirse explicitamente."
+  ]
+}

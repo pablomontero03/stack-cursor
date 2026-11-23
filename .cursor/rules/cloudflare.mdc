@@ -1,0 +1,34 @@
+---
+description: "Cloudflare — Steering"
+alwaysApply: true
+---
+# Cloudflare — Steering
+
+## Alcance
+
+Cuentas, zonas, DNS/DNSSEC, SSL/TLS/Origin CA/mTLS, WAF/rate limiting/Bot Management, Redirect/Transform/Page Rules y Rulesets, Cache y purgas, Workers/Pages/KV/R2/D1/Queues/Durable Objects/Vectorize/Workflows, Load Balancing, Zero Trust (Access/Gateway/WARP), Tunnels, Logpush/audit logs/GraphQL Analytics, notifications y API Tokens.
+
+## Conexión
+
+Dos vías independientes — el fallo de una NO se resuelve sustituyendo credenciales de la otra:
+
+1. **MCP `cloudflare-api`** (`https://mcp.cloudflare.com/mcp`, OAuth del lado cliente) — documentación, descubrimiento, lecturas compatibles.
+2. **API REST oficial** (`$env:CLOUDFLARE_API_TOKEN`, **nunca** Global API Key) — determinista para Apply y fallback de lectura.
+
+## Flujo de operaciones
+
+```
+Get-CloudflareInventory.ps1 → Invoke-CloudflareRead.ps1 →
+New-CloudflareChangePlan.ps1 → Test-CloudflareChangePlan.ps1 → [aprobación] → Invoke-CloudflareRollback.ps1 (si necesario)
+```
+
+- **No requieren aprobación:** lectura, inventario, diagnóstico, simulación, GraphQL solo lectura, `terraform plan/validate/show`, `wrangler` de lectura.
+- **Una sola aprobación** cubre el plan completo de creaciones/modificaciones (inmutable, por plan completo).
+- **Aprobación separada siempre** para cualquier eliminación lógica o real: purga de cache, reemplazo de Ruleset que remueve reglas, desvincular custom domain/route/binding, revocar token/certificado, `terraform destroy`, `wrangler delete`.
+- Un endpoint REST, tool MCP o subcomando no reconocido → **siempre preguntar**, nunca denegar permanentemente.
+
+## Fuentes de verdad
+
+- Skill: `.cursor/skills/manage-cloudflare/SKILL.md`
+- Docs: `docs/cloudflare/CLOUDFLARE-AUTOMATION-ARCHITECTURE.md`
+- Spec original: `INSTRUCCIONES-AUTOMATIZACION-CLOUDFLARE.md`

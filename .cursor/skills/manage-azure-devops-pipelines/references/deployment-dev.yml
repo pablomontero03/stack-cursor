@@ -1,0 +1,277 @@
+# Deploy SOLO app-analytics — DEV
+# Estructura adaptada del patrón web real y confirmado de Build 635
+# (Build-Buklo-sso-web, buklo-web) / Build 633 (logistics-web).
+# securityContext y volúmenes acoplados al Dockerfile.app-analytics real
+# (no-root uid 10001, nginx escribe en /tmp/nginx|cache|logs), NO al
+# patrón root de sso-web (que usa otro Dockerfile).
+#
+# DUMMY TEMPORAL: los valores de identidad de abajo son texto ficticio
+# ("DUMMY-...") a propósito, NUNCA un secreto real. Reemplazar por los
+# valores reales de app-analytics cuando el desarrollador entregue el .env,
+# en los 3 manifiestos (dev/uat/prod).
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: #{servicesname}#-secret
+  namespace: #{namespace}#
+type: Opaque
+stringData:
+  # DUMMY TEMPORAL -- no es un valor real, ver nota de cabecera.
+  NG_APP_HEADERS_API_KEY: "DUMMY-APP-ANALYTICS-HEADERS-API-KEY-PENDING-REAL-VALUE"
+  NG_APP_BASE_SECRET_KEY: "DUMMY-APP-ANALYTICS-BASE-SECRET-KEY-PENDING-REAL-VALUE"
+  NG_APP_BASE_IV_ENCRYPT: "DUMMY-APP-ANALYTICS-BASE-IV-ENCRYPT-PENDING-REAL-VALUE"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: #{servicesname}#-config
+  namespace: #{namespace}#
+data:
+  # DUMMY TEMPORAL -- reemplazar por los valores reales de app-analytics.
+  NG_APP_SYSTEM_UIID: "DUMMY-PENDING-REAL-VALUE-APP-ANALYTICS"
+  NG_APP_MENU_SYSTEM_UIID: "DUMMY-PENDING-REAL-VALUE-APP-ANALYTICS"
+  NG_APP_SYSTEM_TYPE_INTERNAL: "true"
+  NG_APP_SYSTEM_TYPE_EXTERNAL: "false"
+  NG_APP_SYSTEM_TYPE_CORE: "false"
+
+  NG_APP_HEADERS_CONTENT_TYPE: "application/json"
+  NG_APP_HEADERS_ORIGIN: "*"
+
+  NG_APP_BASE_URL_GATEWAY: "https://microservice-gateway-api-dev.gmontecristo.com/api/v1"
+  NG_APP_URL_PORTAL: "https://shell-web-dev.gmontecristo.com"
+  NG_APP_URL_HR: "https://hr-web-dev.gmontecristo.com"
+  NG_APP_URL_ONTOLOGY: "https://ontology-web-dev.gmontecristo.com"
+  NG_APP_URL_TICKETING: "https://ticketing-web-dev.gmontecristo.com"
+  NG_APP_URL_ANALYTICS: "https://analytics-web-dev.gmontecristo.com"
+  NG_APP_URL_LOGISTICS: "https://logistics-web-dev.gmontecristo.com"
+  NG_APP_URL_SSO: "https://sso-web-dev.gmontecristo.com"
+  NG_APP_COOKIE_DOMAIN: ".gmontecristo.com"
+
+  NG_APP_MSAL_AUTH_CLIENT_ID: "8792fa69-3b21-481a-8492-89c15c023d3a"
+  NG_APP_MSAL_AUTH_TENANT_ID: "33dd4184-3068-47da-891d-a70e02f8c0c9"
+  NG_APP_MSAL_AUTH_AUTHORITY: "https://login.microsoftonline.com/33dd4184-3068-47da-891d-a70e02f8c0c9"
+  NG_APP_MSAL_AUTH_REDIRECT_URI: "https://shell-web-dev.gmontecristo.com/autologin"
+  NG_APP_MSAL_AUTH_POST_LOGOUT_REDIRECT_URI: "https://shell-web-dev.gmontecristo.com/signin"
+  NG_APP_MSAL_CONFIG_SCOPES: "User.Read"
+  NG_APP_MSAL_CONFIG_URI: "https://graph.microsoft.com/v1.0/me"
+  NG_APP_MSAL_CONFIG_PROFILE: "https://graph.microsoft.com/v1.0/me"
+  NG_APP_MSAL_CONFIG_PROFILE_PHOTO: "https://graph.microsoft.com/v1.0/me/photo/$value"
+
+  NG_APP_TEST_USERS_ENABLED: "true"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: #{servicesname}#
+  namespace: #{namespace}#
+  labels:
+    app: #{servicesname}#
+    version: "#{tag}#"
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: #{servicesname}#
+  template:
+    metadata:
+      labels:
+        app: #{servicesname}#
+        version: "#{tag}#"
+    spec:
+      imagePullSecrets:
+        - name: acr-pull-secret
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir:
+            sizeLimit: 100Mi
+        - name: app-logs
+          emptyDir:
+            sizeLimit: 50Mi
+      containers:
+        - name: #{servicesname}#
+          image: "#{containerregistries}#/#{servicesname}##{ambiente}#:#{tag}#"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: #{servicesname}#-config
+            - secretRef:
+                name: #{servicesname}#-secret
+          env:
+            - name: TZ
+              value: "America/Costa_Rica"
+            - name: NODE_ENV
+              value: "production"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: nginx-run
+              mountPath: /tmp/nginx
+            - name: nginx-cache
+              mountPath: /tmp/cache
+            - name: app-logs
+              mountPath: /tmp/logs
+          resources:
+            requests:
+              cpu: "#{reqcpu}#m"
+              memory: "#{reqmem}#Mi"
+            limits:
+              cpu: "#{limcpu}#m"
+              memory: "#{limmem}#Mi"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 30
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 15"]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: #{servicesname}#
+  namespace: #{namespace}#
+  labels:
+    app: #{servicesname}#
+spec:
+  type: ClusterIP
+  selector:
+    app: #{servicesname}#
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8080
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: #{servicesname}#-ingress
+  namespace: #{namespace}#
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "300m"
+    nginx.ingress.kubernetes.io/proxy-buffering: "on"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "240"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "240"
+    nginx.ingress.kubernetes.io/upstream-keepalive-connections: "32"
+    nginx.ingress.kubernetes.io/upstream-keepalive-timeout: "60s"
+    nginx.ingress.kubernetes.io/upstream-keepalive-requests: "100"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/affinity-mode: "persistent"
+    nginx.ingress.kubernetes.io/session-cookie-name: "route"
+    nginx.ingress.kubernetes.io/session-cookie-path: "/"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "86400"
+    nginx.ingress.kubernetes.io/proxy-next-upstream: "error timeout http_502 http_503 http_504"
+    nginx.ingress.kubernetes.io/proxy-next-upstream-tries: "3"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - analytics-web-dev.gmontecristo.com
+      secretName: gmontecristo-secret
+  rules:
+    - host: analytics-web-dev.gmontecristo.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: #{servicesname}#
+                port:
+                  number: 80
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: #{servicesname}#-hpa
+  namespace: #{namespace}#
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: #{servicesname}#
+  minReplicas: 1
+  maxReplicas: 1
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      selectPolicy: Max
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      selectPolicy: Max
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60

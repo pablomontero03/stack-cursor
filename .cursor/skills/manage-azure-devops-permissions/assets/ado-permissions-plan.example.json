@@ -1,0 +1,174 @@
+{
+    "schemaVersion": 1,
+    "operationKind": "non-destructive",
+    "generatedAtUtc": "2026-08-26T17:39:12.9959968Z",
+    "organization": "Shared-Service-GM",
+    "projects": [
+        {
+            "name": "Ejemplo-Proyecto",
+            "developmentTeam": {
+                "role": "developmentTeam",
+                "status": "existing",
+                "descriptor": "vssgp.EJEMPLO_DEV_TEAM",
+                "displayName": "Development Team",
+                "existingDescription": null
+            },
+            "codeReviewers": {
+                "role": "codeReviewers",
+                "status": "toCreate",
+                "descriptor": null,
+                "displayName": "Code-Reviewers (Revision Y Aprobacion Del Lider De Proyecto)",
+                "existingDescription": null
+            }
+        }
+    ],
+    "descriptionMode": "PreserveExisting",
+    "membershipMode": "additive",
+    "currentIdentityDescriptor": "aad.EJECUTOR_EJEMPLO",
+    "inventoryPath": "D:\\Proyectos\\automation\\.local\\azure-devops-permissions\\exports\\inventory-permissions-ejemplo-20260826-170919.json",
+    "inventoryGeneratedAtUtc": "2026-08-26T17:09:19.9324776Z",
+    "inventoryHash": "58d6ca8391f90541729d9d2d477bcad588e790972930c3cc79f982935fd5de62",
+    "lockoutAcknowledgements": [],
+    "approvedOperations": [
+        {
+            "operationId": "create-codeReviewers-001",
+            "operationType": "create-security-group",
+            "method": "POST",
+            "uri": "https://vssps.dev.azure.com/Shared-Service-GM/_apis/graph/groups?scopeDescriptor=scp.EJEMPLO&api-version=7.1-preview.1",
+            "body": {
+                "displayName": "Code-Reviewers (Revision Y Aprobacion Del Lider De Proyecto)",
+                "description": "Líderes o responsables de revisión y aprobación de código del proyecto. Participan en pull requests y aplican la matriz de permisos definida; este grupo por sí solo no crea una política de revisores obligatorios."
+            },
+            "bodyHash": "03fac5b56f072ff3c183660ce01c3561859883d956fdcdd883a53b7558cad37a",
+            "precondition": {
+                "expectedNotExists": true,
+                "scopeDescriptor": "scp.EJEMPLO",
+                "displayName": "Code-Reviewers (Revision Y Aprobacion Del Lider De Proyecto)"
+            }
+        },
+        {
+            "operationId": "desc-developmentTeam-002",
+            "operationType": "update-security-group-description",
+            "method": "PATCH",
+            "uri": "https://vssps.dev.azure.com/Shared-Service-GM/_apis/graph/groups/vssgp.EJEMPLO_DEV_TEAM?api-version=7.1-preview.1",
+            "body": [
+                {
+                    "op": "add",
+                    "path": "/description",
+                    "value": "Equipo de desarrollo del proyecto. Puede leer y contribuir en los repositorios y ramas autorizadas según la matriz definida, sin administrar permisos, editar políticas, omitir políticas ni eliminar recursos."
+                }
+            ],
+            "bodyHash": "de2aa120b84864a0d49453d0e0ee9f5a9f1a9b2ab3330a69b488d14f3060aee0",
+            "precondition": {
+                "expectedCurrentDescription": "",
+                "groupDescriptor": "vssgp.EJEMPLO_DEV_TEAM"
+            }
+        },
+        {
+            "operationId": "member-developmentTeam-003",
+            "operationType": "add-group-membership",
+            "method": "PUT",
+            "uri": "https://vssps.dev.azure.com/Shared-Service-GM/_apis/graph/memberships/aad.EJEMPLO_MIEMBRO/vssgp.EJEMPLO_DEV_TEAM?api-version=7.1-preview.1",
+            "body": null,
+            "bodyHash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "precondition": {
+                "expectedMembershipNotExists": true,
+                "memberDescriptor": "aad.EJEMPLO_MIEMBRO",
+                "containerDescriptor": "vssgp.EJEMPLO_DEV_TEAM"
+            }
+        },
+        {
+            "operationId": "ace-allrepos-004",
+            "operationType": "set-git-permissions-ace",
+            "method": "POST",
+            "uri": "https://dev.azure.com/Shared-Service-GM/_apis/accesscontrollists/2e9eb7ed-3c0a-47d4-87c1-0ffdd275fd87?api-version=7.1",
+            "body": {
+                "value": [
+                    {
+                        "inheritPermissions": true,
+                        "token": "repoV2/11111111-1111-1111-1111-111111111111",
+                        "acesDictionary": {
+                            "vssgp.EJEMPLO_DEV_TEAM": {
+                                "descriptor": "vssgp.EJEMPLO_DEV_TEAM",
+                                "allow": 16439,
+                                "deny": 507848
+                            }
+                        }
+                    }
+                ]
+            },
+            "bodyHash": "f71ef2ef757e5307baca06da16400ff65e5f640528dd5f7b7b951cd8cb456006",
+            "precondition": {
+                "token": "repoV2/11111111-1111-1111-1111-111111111111",
+                "namespaceId": "2e9eb7ed-3c0a-47d4-87c1-0ffdd275fd87",
+                "descriptors": {
+                    "vssgp.EJEMPLO_DEV_TEAM": {
+                        "expectedExplicitAllow": 3,
+                        "expectedExplicitDeny": 0
+                    }
+                }
+            }
+        },
+        {
+            "operationId": "ace-EjemploRepo-main-005",
+            "operationType": "set-git-permissions-ace",
+            "method": "POST",
+            "uri": "https://dev.azure.com/Shared-Service-GM/_apis/accesscontrollists/2e9eb7ed-3c0a-47d4-87c1-0ffdd275fd87?api-version=7.1",
+            "body": {
+                "value": [
+                    {
+                        "inheritPermissions": true,
+                        "token": "repoV2/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/refs/heads/6d61696e",
+                        "acesDictionary": {
+                            "vssgp.EJEMPLO_DEV_TEAM": {
+                                "descriptor": "vssgp.EJEMPLO_DEV_TEAM",
+                                "allow": 0,
+                                "deny": 4
+                            }
+                        }
+                    }
+                ]
+            },
+            "bodyHash": "e447da4ba9e80e9f8c32ca32b37008a46f8fd96550b2afc7cd47825b11000333",
+            "precondition": {
+                "token": "repoV2/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/refs/heads/6d61696e",
+                "namespaceId": "2e9eb7ed-3c0a-47d4-87c1-0ffdd275fd87",
+                "descriptors": {
+                    "vssgp.EJEMPLO_DEV_TEAM": {
+                        "expectedExplicitAllow": 0,
+                        "expectedExplicitDeny": 0
+                    }
+                }
+            }
+        }
+    ],
+    "deferredAfterCreation": [
+        {
+            "project": "Ejemplo-Proyecto",
+            "role": "codeReviewers",
+            "reason": "El grupo todavia no existe -- su descriptor real solo se conoce despues de aplicar la creacion (operationId de arriba) y hacer readback.",
+            "pendingMembers": [
+                {
+                    "displayName": "Ejemplo Revisor",
+                    "descriptor": "aad.EJEMPLO_REVISOR"
+                }
+            ],
+            "pendingAceManaged": true,
+            "nextStep": "Volver a exportar el inventario y correr New-AdoPermissionsPlan.ps1 de nuevo para este proyecto una vez creado el grupo."
+        }
+    ],
+    "notes": [
+        "Proyecto 'Ejemplo-Proyecto' / Development Team: sin descripcion -- se agrega la estandar."
+    ],
+    "validated": true,
+    "lastValidatedAtUtc": "2026-08-26T17:25:50.0957218Z",
+    "validationBlockers": [],
+    "validationWarnings": [],
+    "validationEvidence": {
+        "inventoryGeneratedAtUtc": "2026-08-26T17:09:19.9324776Z",
+        "inventoryHash": "58d6ca8391f90541729d9d2d477bcad588e790972930c3cc79f982935fd5de62",
+        "validatedAtUtc": "2026-08-26T17:25:50.1068236Z",
+        "maxInventoryAgeHours": 24
+    },
+    "validationHash": "EJEMPLO_HASH_NO_USAR_TAL_CUAL_65b0a0025a86a21407e129d466b6d3722"
+}

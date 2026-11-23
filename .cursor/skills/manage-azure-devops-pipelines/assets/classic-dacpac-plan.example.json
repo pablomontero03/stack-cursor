@@ -1,0 +1,67 @@
+{
+  "family": "dacpac",
+  "generatedAtUtc": "2026-01-01T00:00:00.0000000Z",
+  "organization": "Shared-Service-GM",
+  "project": "DevOps",
+  "validated": false,
+  "names": {
+    "build": "Base_Datos_Build_sqldb_ejemplo_Produccion",
+    "release": "Base_Datos_sqldb_ejemplo_PRODUCCION",
+    "folder": "\\BaseDatos\\sqldb_ejemplo"
+  },
+  "repo": {
+    "name": "project_sqldb_ejemplo",
+    "prodBranch": "release"
+  },
+  "buildVariables": {
+    "databaseProjectName": "sqldb_ejemplo",
+    "BuildConfiguration": "Debug",
+    "BuildPlatform": "any cpu",
+    "BATCH_PR_TITLE_MARKER": "[AUTO]",
+    "BATCH_WAIT_REASONS": "IndividualCI,BatchedCI",
+    "BATCH_WINDOW_MINUTES": "3",
+    "SUPERSEDE_REASONS": "IndividualCI,BatchedCI",
+    "system.debug": "false"
+  },
+  "buildJobs": ["Batch_Gate", "Batch_Window", "Job_1"],
+  "buildAgentPool": "CHANGE_ME_confirmar_pool_msbuild_en_vivo",
+  "dependencies": {
+    "buildTaskGroups": [
+      { "name": "Evaluar-ventana-agrupacion", "id": null, "revision": null },
+      { "name": "Gana-el-mas-nuevo", "id": null, "revision": null },
+      { "name": "Build-DataBases", "id": null, "revision": null },
+      { "name": "Reportar-resultado-HU", "id": null, "revision": null }
+    ],
+    "deployTaskGroup": { "name": "Deployment-DataBases", "id": null, "revision": null },
+    "agentPool": { "name": "CHANGE_ME_confirmar_pool_msbuild_en_vivo", "id": null }
+  },
+  "sharedLibrary": {
+    "name": "Bases Datos SQL",
+    "id": null,
+    "expectedExisting": true,
+    "note": "Nunca se crea una Library nueva para BD; se referencia la compartida ya existente."
+  },
+  "release": {
+    "artifactAlias": "_Base_Datos_Build_sqldb_ejemplo_Produccion",
+    "cdTriggerEnabled": true,
+    "stage": "Produccion",
+    "deployTaskGroup": "Deployment-DataBases",
+    "variables": {
+      "databaseProjectName": "sqldb_ejemplo",
+      "database": "ejemplo",
+      "build": "Base_Datos_Build_sqldb_ejemplo_Produccion",
+      "mode": "Apply"
+    },
+    "requerimientoPrefijo": "TKS",
+    "adoPrProject": "Database-Administration-and-Monitoring"
+  },
+  "approvedOperations": [],
+  "validationEvidence": null,
+  "notes": [
+    "Ejemplo sanitizado, no operativo. buildAgentPool queda como placeholder deliberado para que Test-AdoClassicPlan.ps1 lo bloquee si se usa tal cual.",
+    "mode=Apply describe la configuracion destino de la definicion de Release; no implica crear ni ejecutar una instancia de Release real ni aplicar el DACPAC ahora.",
+    "dependencies.*.id/revision quedan null a proposito: los resuelve Test-AdoClassicPlan.ps1 contra un -InventoryPath real, nunca se inventan aqui.",
+    "approvedOperations vacio a proposito: los payloads de Build/Release clasico no estan confirmados todavia, asi que ninguna escritura puede aprobarse aun.",
+    "validationEvidence queda null porque este ejemplo nunca paso por Test-AdoClassicPlan.ps1 con un -InventoryPath real."
+  ]
+}

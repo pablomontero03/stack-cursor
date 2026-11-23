@@ -1,0 +1,45 @@
+---
+description: "Azure Resources + FinOps — Steering"
+alwaysApply: true
+---
+# Azure Resources + FinOps — Steering
+
+## Alcance
+
+Administra el plano de control de Microsoft Azure vía ARM: tenants, suscripciones, Resource Groups, redes (VNets/NSG/route tables/Private Endpoints), VMs/VMSS/discos, App Service/Functions/Container Apps, ACR, Storage Accounts, Key Vault y Managed Identities (sin exponer secretos), Azure SQL/SQL MI a nivel de infraestructura, Azure Monitor/Log Analytics/alertas, tags/locks/Azure Policy/RBAC, Cost Management en modo lectura, y AKS como recurso de Azure (clúster/node pools).
+
+> Los objetos internos de Kubernetes y Helm son dominio `manage-aks-clusters`, no este.
+
+## Conexión
+
+- Azure CLI (`az`) usando la sesión de `az login` ya establecida — **nunca ejecutar `az login`/`az logout`/`az account clear`** desde este flujo.
+- Azure Resource Graph (`az graph query`) para inventarios amplios.
+- `az rest` como ARM REST controlado.
+- **El MCP oficial `azure` (`@azure/mcp`) está diferido** (pendiente versión estable). El dominio funciona 100% con az CLI; no asumir que el MCP existe.
+- Suscripción activa predeterminada: `Hospital Metropolitano` (`69dc43ec-5f24-4203-9239-a8d0f8506d44`), tenant `Grupo Montecristo` (`33dd4184-3068-47da-891d-a70e02f8c0c9`).
+
+## Flujo de operaciones
+
+```
+New-AzureChangePlan.ps1 → Test-AzureChangePlan.ps1 → [aprobación] → Apply-AzureChangePlan.ps1
+```
+
+- Una sola aprobación cubre el plan completo de creaciones/modificaciones no destructivas, identificado por su `validationHash`, siempre que el plan haya enumerado tenant, suscripción, RG, resource IDs exactos, operaciones, dependencias, impacto, costo estimado, what-if/diff, respaldo, verificación y rollback.
+- Las eliminaciones exigen **siempre una aprobación separada** e inmediatamente previa: `Apply-AzureDeletePlan.ps1` con respaldo de solo lectura obligatorio antes de cada DELETE real.
+- Eliminar un Resource Group completo = operación aislada, nunca agrupa con otra eliminación.
+- No hay rollback automático: siempre se prepara como un `New-AzureRollbackPlan.ps1` con aprobación propia.
+- Secretos que un plan necesite: solo como placeholder `${AZURE_SECRET_NOMBRE}` — el valor real se resuelve dentro de `Apply-AzureChangePlan.ps1` ya aprobado, nunca se imprime.
+
+## Sub-skill FinOps (`analyze-azure-costs`)
+
+- Reutiliza `Azure-Common.ps1` y el mecanismo plan/aprobación del dominio.
+- Suscripción objetivo: `Hospital Metropolitano` (`69dc43ec...`).
+- Solo análisis y recomendaciones; los cambios de optimización van al flujo estándar de Azure Resources.
+- Datos financieros bajo `.local/azure/finops/` (no versionado). No en `docs/` ni archivos versionados.
+- `az rest --method post` contra Cost Management Query/Forecast se clasifica como lectura.
+
+## Fuentes de verdad
+
+- Skill: `.cursor/skills/manage-azure-resources/SKILL.md`
+- Docs: `docs/azure/AZURE-AUTOMATION-ARCHITECTURE.md`
+- FinOps: `.cursor/skills/analyze-azure-costs/SKILL.md`, `INSTRUCCIONES-SUBAGENTE-AZURE-FINOPS.md`

@@ -6,7 +6,9 @@ Cursor no está instalado en este servidor. Esta carpeta es el proyecto: se abre
 
 ## Estado
 
-Fase 1 cerrada el 2026-11-23. Hay esqueleto, contrato y el inventario de propósitos del stack Kiro. Las skills, los subagentes, las rules y los hooks todavía no están convertidos.
+Fase 3 cerrada el 2026-11-23. Hay esqueleto, contrato, documentación, schema-sync, las 10 rules y las 12 skills con sus scripts. Faltan subagentes, memorias, el hook de SQL y el MCP.
+
+La fuente de verdad de lo que todavía no se porta sigue siendo `/home/cursor/automation-kiro`.
 
 La fuente de verdad del comportamiento sigue siendo `/home/cursor/automation-kiro`. No se reescribe: se porta.
 
