@@ -1,0 +1,28 @@
+# Secretos y credenciales. Nunca versionar.
+env/.env
+env/*.txt
+env/*.pem
+env/*.key
+env/*.pfx
+env/*.p12
+env/*.json
+!env/.env.example
+
+# Área de trabajo de ejecuciones, planes e inventarios.
+.local/
+
+# Binarios que descarga setup.sh
+.local/*/tools/
+
+# Salidas de scripts
+*.dacpac
+out/
+bin/
+obj/
+
+# Logs
+*.log
+audit.log
+
+.DS_Store
+Thumbs.db
