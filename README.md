@@ -6,7 +6,7 @@ Cursor no está instalado en este servidor. Esta carpeta es el proyecto: se abre
 
 ## Estado
 
-Fases 4 y 5 cerradas el 2026-11-23. Hay rules, skills, los 24 subagentes, su memoria, el hook de SQL y el MCP. Falta `setup.sh` (fase 6) y la prueba abriendo la carpeta en Cursor (fase 7).
+Fase 6 cerrada el 2026-11-23. `setup-kiro.sh` conserva el setup original. `setup-cursor.sh` es el de este servidor y ya se ejecutó. Falta la prueba abriendo la carpeta en Cursor por Remote SSH (fase 7).
 
 Los secretos de trabajo están en `env/.env`, armado con los archivos del clon de Kiro. Ese archivo no se versiona.
 

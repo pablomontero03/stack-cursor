@@ -73,9 +73,13 @@ Los comandos stdio cargan `env/.env` con `.cursor/mcp/with-env.sh`. n8n usa el m
 
 ### Fase 6 — setup del servidor
 
-- [ ] `setup.sh` comprueba `pwsh`, `az`, `kubectl`, `node`, `git` y el binario `aks-mcp`
-- [ ] Deja de exigir `kirocrew` y `kiro-cli`
-- [ ] `REPO_ROOT` = esta carpeta
+El `setup.sh` de Kiro no se reescribió. Quedó copiado tal cual en `setup-kiro.sh` como referencia. La copia para este servidor es `setup-cursor.sh`.
+
+- [x] `setup-kiro.sh` es byte a byte el `setup.sh` de `automation-kiro`
+- [x] `setup-cursor.sh` comprueba `pwsh`, `az`, `kubectl`, `node`, `npx`, `git`, `python3`, `curl` y el binario `aks-mcp`
+- [x] No exige `kirocrew` ni `kiro-cli`. Esas comprobaciones siguen solo en `setup-kiro.sh`
+- [x] `REPO_ROOT` es esta carpeta. Se agregó a `~/.bashrc` de `adoadmin` con marca `stack-cursor`
+- [x] Corrido en el servidor: 24 subagentes, 12 skills, 10 rules, `.env` cargado, hook bloquea `DROP` y deja pasar `SELECT`
 
 ### Fase 7 — Prueba en Cursor
 
@@ -122,6 +126,12 @@ No se reescribieron procedimientos. La revisión de secretos en las skills encon
 ### 2026-11-23 — Fases 4 y 5
 
 24 subagentes en `.cursor/agents/` y 90 archivos de memoria en `.cursor/memories/`. El prompt y la memoria son los de Kiro. Hook de SQL portado y probado con comandos de lectura y de escritura. MCP plantilla sin secretos; el `env` de trabajo salió de los archivos del clon de Kiro y no entra al commit.
+
+`automation-kiro` no se modificó.
+
+### 2026-11-23 — Fase 6
+
+`setup-kiro.sh` es la copia intacta del setup de Kiro. `setup-cursor.sh` es la copia para esta raíz y este servidor. Se ejecutó una vez y dejó `REPO_ROOT=/home/cursor/stack-cursor` en el bashrc de adoadmin.
 
 `automation-kiro` no se modificó.
 
