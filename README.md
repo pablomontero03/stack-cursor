@@ -6,7 +6,9 @@ Cursor no está instalado en este servidor. Esta carpeta es el proyecto: se abre
 
 ## Estado
 
-Fase 3 cerrada el 2026-11-23. Hay esqueleto, contrato, documentación, schema-sync, las 10 rules y las 12 skills con sus scripts. Faltan subagentes, memorias, el hook de SQL y el MCP.
+Fases 4 y 5 cerradas el 2026-11-23. Hay rules, skills, los 24 subagentes, su memoria, el hook de SQL y el MCP. Falta `setup.sh` (fase 6) y la prueba abriendo la carpeta en Cursor (fase 7).
+
+Los secretos de trabajo están en `env/.env`, armado con los archivos del clon de Kiro. Ese archivo no se versiona.
 
 La fuente de verdad de lo que todavía no se porta sigue siendo `/home/cursor/automation-kiro`.
 

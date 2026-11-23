@@ -55,21 +55,21 @@ Rutas que se dejaron escritas igual a propósito: `.kiro/steering/<dominio>/secu
 
 ### Fase 4 — Subagentes y memoria
 
-El JSON de Kiro pasa a `.cursor/agents/<nombre>.md`. El campo `prompt` es el cuerpo, completo. `name` y `description` van al frontmatter, con el description de este inventario.
+El JSON de Kiro pasó a `.cursor/agents/<nombre>.md`. El campo `prompt` es el cuerpo, completo. `name`, `description`, `tools` y `model` están en el frontmatter. El prompt no se reescribió: solo se sustituyeron rutas de archivos que ya se movieron.
 
-Cursor no tiene la lista de tools de Kiro (`fs_read`, `grep`, `execute_bash`, `fs_write`, `str_replace`). El límite de solo lectura de reviewers y diagnosers queda escrito en el prompt, además del hook de SQL.
-
-- [ ] 24 subagentes convertidos sin recortar el prompt
-- [ ] `.kiro/agent-memory/` → `.cursor/memories/<agente>/`, archivos tal cual
-- [ ] Cada subagente apunta a su carpeta de memoria para leerla y actualizarla
-- [ ] Incidentes de pipelines (lista abajo) copiados uno a uno
+- [x] 24 subagentes convertidos. El prompt coincide con el original salvo esas rutas.
+- [x] `.kiro/agent-memory/` → `.cursor/memories/<agente>/` (90 archivos, incluidos los incidentes de pipelines).
+- [x] Las skills ya apuntan a `.cursor/memories/` y a `.cursor/agents/<nombre>.md`.
+- [x] La lista de tools de Kiro quedó en el frontmatter (`tools:`), para no perder el permiso de cada subagente.
 
 ### Fase 5 — Hook y MCP
 
-- [ ] `sql-readonly-gate` en `.cursor/hooks.json` (`beforeShellExecution`), mismo criterio de bloqueo
-- [ ] Un solo `.cursor/mcp.json` con rutas de este servidor
-- [ ] Tokens solo por variable de entorno (`env/.env`), nunca dentro del JSON
-- [ ] Servidores: `azure-devops`, `aks`, `n8n-interno`, `n8n-productivo`, `cloudflare-api`
+- [x] `sql-readonly-gate` en `.cursor/hooks.json` (`beforeShellExecution`, `failClosed`). La lista de patrones es la de Kiro. Probado: `SELECT` pasa, `DELETE`/`DROP`/`INSERT` salen con código 2.
+- [x] Un solo `.cursor/mcp.json` con los cinco servidores.
+- [x] Los secretos no están en el JSON. `env/.env` se armó con los archivos ya descargados en `automation-kiro/env` (PAT, registro, tokens n8n) y el token de Cloudflare que estaba en el mcp de Kiro. Esos archivos se copiaron a `stack-cursor/env/` y quedan fuera de git.
+- [x] Servidores: `azure-devops`, `aks`, `n8n-interno`, `n8n-productivo`, `cloudflare-api`.
+
+Los comandos stdio cargan `env/.env` con `.cursor/mcp/with-env.sh`. n8n usa el mismo `supergateway` y las mismas URLs; el bearer lo pone el script desde la variable. `aks-mcp` v0.0.20 para Linux quedó en `.local/` (no se versiona; en el clon de Kiro solo estaba el `.exe` de Windows). El kubeconfig es una copia local de `/home/kiro/.kube/config`, en `.local/kube/config`, para que `adoadmin` pueda leerla.
 
 ### Fase 6 — setup del servidor
 
@@ -116,6 +116,12 @@ Excepción de seguridad: `docs/azure-devops/Build-modelo-backend.json` traía cr
 10 rules en `.cursor/rules/` y 12 skills en `.cursor/skills/` (161 archivos). El cuerpo de cada steering y de cada skill, incluidos scripts, references y assets, es el de Kiro. En el frontmatter de cada skill se conservaron `triggers` y `always`, y los triggers se añadieron al final del `description` para que Cursor pueda activarla.
 
 No se reescribieron procedimientos. La revisión de secretos en las skills encontró solo valores de prueba (`DUMMY-...`, `FAKE_TEST_...`, fixtures). Se dejaron, porque forman parte de los tests.
+
+`automation-kiro` no se modificó.
+
+### 2026-11-23 — Fases 4 y 5
+
+24 subagentes en `.cursor/agents/` y 90 archivos de memoria en `.cursor/memories/`. El prompt y la memoria son los de Kiro. Hook de SQL portado y probado con comandos de lectura y de escritura. MCP plantilla sin secretos; el `env` de trabajo salió de los archivos del clon de Kiro y no entra al commit.
 
 `automation-kiro` no se modificó.
 
