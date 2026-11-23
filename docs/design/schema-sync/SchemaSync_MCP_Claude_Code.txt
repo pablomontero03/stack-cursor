@@ -1,0 +1,1280 @@
+GUÍA DE IMPLEMENTACIÓN
+SCHEMA SYNC + CLAUDE CODE + MCP
+
+Versión: 1.1
+Fecha de referencia: 2026-08-14
+Repositorio: C:\code\BaseDatos
+Actualización incorporada: flujo de cascarón SSDT previo al onboarding.
+
+======================================================================
+1. RESULTADO RECOMENDADO
+======================================================================
+
+Sí conviene utilizar MCP para este proyecto, pero no como sustituto de
+SchemaSyncTool, de la Skill, de los hooks o de n8n.
+
+La arquitectura profesional recomendada es:
+
+1. CLAUDE.md
+   Contiene las reglas globales e invariantes del repositorio.
+
+2. Skill manage-schema-sync-ssdt
+   Le enseña a Claude el procedimiento operativo: consultar, diagnosticar,
+   planificar, ejecutar una sola BD, crear o validar un cascarón SSDT,
+   incorporar una BD y validar cambios.
+
+3. Agentes especializados
+   Separan revisión y diagnóstico en tareas de solo lectura.
+
+4. Hooks y permisos
+   Bloquean operaciones peligrosas antes de ejecutarse y validan cambios.
+
+5. MCP oficial de Azure DevOps
+   Permite consultar repositorios, ramas, PR y pipelines sin copiar datos
+   manualmente al chat.
+
+6. MCP interno Schema Sync
+   Expone operaciones pequeñas, tipadas y seguras sobre databases.json,
+   results y la ejecución controlada de una sola base.
+
+7. SchemaSyncTool
+   Continúa siendo el motor real que extrae, compara, actualiza SSDT,
+   valida, hace push, abre/reutiliza PR y produce el resultado JSON.
+
+8. n8n
+   Continúa siendo el orquestador operativo y de notificaciones.
+
+9. Plugin, más adelante
+   Solo será necesario cuando se quiera distribuir todo el conjunto a
+   varios repositorios o equipos como un paquete versionado.
+
+En otras palabras:
+
+    Claude conversa y decide el flujo.
+    La Skill define cómo trabajar.
+    Los agentes revisan y diagnostican.
+    MCP ofrece herramientas controladas.
+    Hooks y permisos aplican políticas del lado de Claude Code.
+    SchemaSyncMcpServer vuelve a validar las políticas del lado servidor.
+    SchemaSyncTool realiza el trabajo real.
+
+No se recomienda crear primero un plugin. Para C:\code\BaseDatos es más
+sencillo, comprobable y mantenible comenzar con configuración de proyecto.
+
+======================================================================
+2. PRINCIPIOS QUE NO CAMBIAN
+======================================================================
+
+Las siguientes reglas son invariantes aunque se agregue MCP:
+
+- La base de datos es origen de esquema y siempre se consulta en modo de
+  solo lectura.
+- Utilizar SqlPackage /Action:Extract y ApplicationIntent=ReadOnly.
+- Nunca ejecutar Publish, Deploy, DDL, DML ni SQL arbitrario contra una BD.
+- Nunca aceptar TargetConnectionString para publicar en SQL.
+- databases.json es la fuente de verdad de bases, enabled, servidor, repo,
+  proyecto y workflow.
+- Ejecutar como máximo una base por solicitud.
+- No ejecutar el orquestador ScHmSyNcOrCh0001.
+- Mantener ScHmSyNcOrCh0001 inactivo y do_not_auto_run=true.
+- No ejecutar run-batch.sh --execute desde Claude.
+- No completar PR automáticamente.
+- Mantener el flujo main hacia release sin autocomplete.
+- No habilitar schedules automáticamente.
+- No habilitar Softland en n8n o databases.json hasta una decisión explícita.
+- No mostrar connection strings, PAT, tokens, contraseñas o webhooks.
+- Toda operación con efectos externos requiere autorización humana explícita.
+- En un repo vacío o con solo README, crear y compilar un cascarón SSDT antes
+  de importar el esquema, modificar databases.json o montar n8n.
+- No crear un cascarón si ya existe un proyecto SSDT.
+
+MCP no elimina estas reglas. Debe reforzarlas.
+
+======================================================================
+3. ARQUITECTURA FINAL
+======================================================================
+
+Flujo de consulta:
+
+    Usuario
+      -> Claude Code
+      -> Skill manage-schema-sync-ssdt
+      -> MCP schema-sync: catálogo, resultados y planificación
+      -> MCP azure-devops: PR, ramas, commits y builds
+      -> Respuesta consolidada sin ejecutar nada
+
+Flujo de ejecución:
+
+    Usuario solicita plan
+      -> schema_sync_plan_run
+      -> Claude muestra BD, repo, workflow y efectos
+      -> usuario autoriza de forma explícita
+      -> schema_sync_execute_one
+      -> servidor vuelve a validar el plan
+      -> workflow individual n8n
+      -> SchemaSyncTool
+      -> Azure SQL MI con solo lectura
+      -> archivos SSDT / Git / PR / build / Teams
+      -> result JSON
+      -> Claude consulta estado y presenta evidencias
+
+Separación de responsabilidades:
+
+Componente                  Responsabilidad
+--------------------------  -------------------------------------------
+CLAUDE.md                   Políticas globales del repositorio
+Skill                       Procedimiento y selección de herramientas
+Agentes                     Revisión y diagnóstico independientes
+Hooks                       Control preventivo de comandos y validaciones
+Permisos Claude Code        Allow/ask/deny de herramientas
+MCP Azure DevOps            Consultas oficiales a Azure DevOps
+MCP Schema Sync             API segura del dominio Schema Sync
+SchemaSyncTool              Motor determinista de sincronización
+n8n                         Orquestación, scheduling y notificación
+databases.json              Catálogo ejecutable y fuente de verdad
+results/*.json              Evidencia de cada corrida
+
+======================================================================
+4. ESTRUCTURA PROPUESTA DEL REPOSITORIO
+======================================================================
+
+C:\code\BaseDatos\
+|-- CLAUDE.md
+|-- .mcp.json
+|-- .claude\
+|   |-- settings.json
+|   |-- settings.local.json          No versionar
+|   |-- skills\
+|   |   `-- manage-schema-sync-ssdt\
+|   |       |-- SKILL.md
+|   |       `-- references\
+|   |           `-- mcp-tools.md     Opcional; contratos detallados
+|   |-- agents\
+|   |   |-- schema-sync-reviewer.md
+|   |   `-- schema-sync-diagnoser.md
+|   `-- hooks\
+|       |-- schema-sync-security-gate.ps1
+|       |-- schema-sync-post-validate.ps1
+|       `-- schema-sync-stop-validate.ps1
+|-- docs\
+|   `-- specs\
+|       `-- schema-sync-onboarding-template.md
+`-- automation\
+    `-- schema-sync\
+        |-- README.md
+        |-- CONTEXTO-COMPLETO.md
+        |-- databases.json
+        |-- set-params.databases.json
+        |-- results\
+        |-- SchemaSyncTool\
+        `-- SchemaSyncMcpServer\
+            |-- SchemaSyncMcpServer.csproj
+            |-- Program.cs
+            |-- Tools\
+            |   |-- CatalogTools.cs
+            |   |-- ResultTools.cs
+            |   |-- PlanningTools.cs
+            |   |-- ExecutionTools.cs
+            |   `-- ValidationTools.cs
+            |-- Services\
+            |   |-- CatalogService.cs
+            |   |-- ResultService.cs
+            |   |-- PlanService.cs
+            |   |-- N8nService.cs
+            |   |-- GuardrailService.cs
+            |   `-- AuditService.cs
+            `-- Contracts\
+
+No es necesario duplicar el contenido de README.md o
+CONTEXTO-COMPLETO.md dentro de la Skill. La Skill debe indicar cuándo leer
+cada fuente y cargar únicamente el contexto necesario.
+
+======================================================================
+5. LOS DOS MCP Y PARA QUÉ SE UTILIZA CADA UNO
+======================================================================
+
+5.1 MCP oficial de Azure DevOps
+
+Utilizarlo para:
+
+- Resolver proyectos y repositorios.
+- Consultar ramas main y release.
+- Consultar commits.
+- Localizar PR existentes.
+- Leer estado y comentarios de PR.
+- Consultar builds y sus logs.
+- Correlacionar commitSha, prUrl y buildOk del result JSON.
+
+No utilizarlo para:
+
+- Crear o actualizar PR desde Claude.
+- Activar autocomplete.
+- Votar o agregar reviewers.
+- Crear ramas.
+- Ejecutar, crear, cancelar o reintentar pipelines.
+
+SchemaSyncTool ya contiene el comportamiento aprobado de Git y PR. Permitir
+un segundo camino de escritura desde el MCP oficial duplicaría capacidades y
+aumentaría el riesgo.
+
+5.2 MCP interno Schema Sync
+
+Utilizarlo para:
+
+- Leer databases.json de forma tipada.
+- Resolver nombre real de BD, repo, proyecto y workflow.
+- Leer y normalizar results/*.json.
+- Preparar un plan de corrida sin ejecutar.
+- Ejecutar únicamente un plan aprobado para una sola base.
+- Consultar progreso y resultado.
+- Validar el catálogo y una spec de onboarding.
+- Ejecutar self-tests seguros.
+
+No debe exponer:
+
+- execute_sql.
+- run_command, shell, bash o PowerShell arbitrario.
+- connection strings.
+- ejecución de un workflow n8n arbitrario.
+- parámetros repoUrl, sqlServer o workflowId proporcionados libremente por
+  el modelo.
+- ejecución batch.
+- activación de schedules.
+- habilitación de bases.
+- publicación hacia SQL.
+- completar o modificar PR.
+
+======================================================================
+6. INSTALAR EL MCP OFICIAL DE AZURE DEVOPS EN CLAUDE CODE
+======================================================================
+
+Requisitos:
+
+- Node.js 20 o superior para el servidor local oficial.
+- Claude Code instalado.
+- Acceso autorizado a la organización Shared-Service-GM.
+- Preferiblemente una identidad de Azure DevOps con permisos efectivos de
+  solo lectura para Code y Build.
+
+La restricción real debe existir también en Azure DevOps. Un deny dentro de
+Claude Code es defensa adicional, no reemplaza los permisos del servidor.
+
+Opción inicial recomendada para este proyecto: servidor local stdio.
+
+Desde PowerShell:
+
+    Set-Location C:\code\BaseDatos
+
+    claude mcp add --transport stdio --scope project azure-devops -- `
+      npx -y @azure-devops/mcp Shared-Service-GM `
+      -d core repositories pipelines
+
+    claude mcp list
+
+La opción -d limita los dominios cargados. Para este caso se requieren:
+
+- core
+- repositories
+- pipelines
+
+No cargar work-items, wiki, test-plans, search o advanced-security si no son
+necesarios para el flujo.
+
+El archivo .mcp.json generado debería ser equivalente a:
+
+    {
+      "mcpServers": {
+        "azure-devops": {
+          "type": "stdio",
+          "command": "npx",
+          "args": [
+            "-y",
+            "@azure-devops/mcp",
+            "Shared-Service-GM",
+            "-d",
+            "core",
+            "repositories",
+            "pipelines"
+          ]
+        }
+      }
+    }
+
+Al utilizar una herramienta por primera vez, completar el inicio de sesión
+interactivo de Microsoft. También es posible utilizar una sesión previa de
+Azure CLI agregando:
+
+    --authentication azcli
+
+No guardar PAT ni tokens dentro de .mcp.json.
+
+Alternativa remota oficial:
+
+    claude mcp add --transport http --scope project azure-devops-remote `
+      https://mcp.dev.azure.com/Shared-Service-GM
+
+Después, abrir Claude Code y ejecutar:
+
+    /mcp
+
+Seguir el proceso de autenticación indicado por el cliente.
+
+Para la primera etapa se recomienda la variante local porque permite cargar
+solamente core, repositories y pipelines de forma explícita. No mantener dos
+conexiones de Azure DevOps activas si ambas ofrecen la misma función.
+
+Los servidores guardados con scope project se comparten mediante .mcp.json.
+Cada integrante debe revisar el archivo, confiar en el workspace y aprobar el
+servidor en una sesión interactiva.
+
+======================================================================
+7. BLOQUEAR ESCRITURAS DEL MCP DE AZURE DEVOPS
+======================================================================
+
+Fusionar este fragmento con .claude/settings.json. No reemplazar los hooks o
+permisos existentes.
+
+    {
+      "permissions": {
+        "deny": [
+          "mcp__azure-devops__repo_pull_request_write",
+          "mcp__azure-devops__repo_pull_request_thread_write",
+          "mcp__azure-devops__repo_create_branch",
+          "mcp__azure-devops__pipelines_write",
+          "Read(./.env)",
+          "Read(./.env.*)",
+          "Read(./secrets/**)",
+          "Read(./**/credentials*.json)"
+        ],
+        "ask": [
+          "mcp__schema-sync__schema_sync_execute_one"
+        ]
+      }
+    }
+
+Reglas importantes:
+
+- deny se evalúa antes que ask y allow.
+- Los nombres completos de las herramientas MCP siguen el formato:
+
+      mcp__<servidor>__<herramienta>
+
+- Microsoft puede consolidar o renombrar herramientas entre versiones.
+- Después de actualizar @azure-devops/mcp, revisar /mcp y /permissions.
+- Si aparece una herramienta nueva con capacidad de escritura, bloquearla
+  antes de utilizar la nueva versión en operación.
+- Evitar reglas allow amplias como mcp__azure-devops__*.
+- Mantener los permisos efectivos de Azure DevOps en solo lectura aunque
+  estas reglas estén presentes.
+
+Las herramientas de escritura publicadas actualmente por el conjunto local
+de repositories/pipelines y que deben permanecer bloqueadas son:
+
+- repo_pull_request_write
+- repo_pull_request_thread_write
+- repo_create_branch
+- pipelines_write
+
+Las consultas permitidas incluyen, según la versión instalada:
+
+- repo_repository
+- repo_pull_request
+- repo_pull_request_thread
+- repo_branch
+- repo_file
+- repo_search_commits
+- pipelines_build
+- pipelines_build_log
+- pipelines_definition
+- pipelines_run
+- pipelines_artifact
+
+======================================================================
+8. DISEÑO DEL MCP INTERNO SCHEMA SYNC
+======================================================================
+
+Tecnología recomendada:
+
+- .NET, para compartir lenguaje, modelos y validaciones con SchemaSyncTool.
+- SDK oficial de MCP para C# mantenido junto con Microsoft.
+- Primera etapa: transporte stdio para desarrollo y herramientas de lectura.
+- Etapa operativa: Streamable HTTP en la red privada, alojado cerca de n8n y
+  SchemaSyncTool en 172.16.2.60.
+
+No publicar el servidor directamente en Internet.
+
+8.1 Herramientas de solo lectura
+
+schema_sync_list_databases
+
+Entrada:
+
+    enabledOnly: boolean, opcional, valor predeterminado true
+    filter: string, opcional
+
+Salida:
+
+    database
+    enabled
+    sqlServer redactado o clasificado
+    repoName
+    projectName
+    workflowName
+    workflowId
+    bundle
+    specialCase
+
+No debe devolver credenciales o una connection string.
+
+schema_sync_get_database
+
+Entrada:
+
+    database: nombre exacto o alias controlado
+
+Salida:
+
+    registro normalizado de databases.json
+    validaciones de mapping
+    advertencias
+
+schema_sync_get_last_result
+
+Entrada:
+
+    database: nombre exacto
+
+Salida normalizada:
+
+    status
+    phase
+    hadDrift
+    commitSha
+    prUrl
+    buildOk
+    message
+    startedAt
+    finishedAt
+    runId
+
+schema_sync_plan_run
+
+Entrada:
+
+    database: nombre exacto
+
+Validaciones:
+
+- La entrada existe en databases.json.
+- enabled=true.
+- Tiene un workflow individual válido.
+- No es ScHmSyNcOrCh0001.
+- No es Softland.
+- No forma parte de una solicitud batch.
+- El repo y el proyecto son coherentes.
+- No existe una corrida activa incompatible.
+
+Salida:
+
+    planId opaco
+    database
+    repoName
+    projectName
+    workflowName
+    workflowId resuelto por el servidor
+    catalogHash
+    effects
+    warnings
+    expiresAt
+    requiresApproval: true
+
+El plan no ejecuta nada.
+
+schema_sync_get_run_status
+
+Entrada:
+
+    runId o database
+
+Salida:
+
+    queued, running, succeeded, failed o unknown
+    fase actual
+    timestamps
+    resultado normalizado cuando esté disponible
+
+schema_sync_validate_catalog
+
+Validaciones mínimas:
+
+- JSON válido.
+- Nombres de BD no duplicados.
+- workflowId no duplicado accidentalmente.
+- enabled implica todos los campos requeridos.
+- El orquestador permanece inactivo y excluido.
+- Softland no queda enabled.
+- Mappings repo/proyecto presentes.
+- No hay secretos o connection strings embebidos.
+
+schema_sync_validate_onboarding
+
+Entrada:
+
+    specPath bajo docs/specs
+
+Salida:
+
+    passed
+    errors
+    warnings
+    checks
+
+Esta herramienta valida una propuesta, pero no modifica databases.json,
+n8n ni Azure DevOps.
+
+La validación de onboarding también debe comprobar:
+
+- Si el repo está vacío, contiene solo README o ya tiene proyecto SSDT.
+- Si corresponde crear un cascarón.
+- Existencia de .sqlproj, .slnx, build-dacpac.ps1 y .gitignore.
+- ProjectGuid nuevo cuando el cascarón fue creado desde una plantilla.
+- DSP y DefaultFileStructure esperados.
+- Exclusión de bin, obj, out y *.dacpac.
+- Build del cascarón con cero errores.
+- Método de import seleccionado según tamaño y timeouts.
+- Import validado antes de permitir catálogo o workflow.
+
+schema_sync_run_self_tests
+
+Solo puede ejecutar pruebas que no contacten una BD para modificarla y que
+no disparen una sincronización real. Ejemplos:
+
+- self-test-sqlcmd
+- self-test-model, si no produce efectos externos
+- validación de JSON
+- pruebas unitarias de GuardrailService
+
+8.2 Herramienta con efecto externo
+
+schema_sync_execute_one
+
+Entrada recomendada:
+
+    planId: identificador opaco emitido por schema_sync_plan_run
+    acknowledgement: texto de confirmación presentado al usuario
+
+No aceptar como entrada:
+
+- SQL.
+- command.
+- repoUrl.
+- sqlServer.
+- connectionString.
+- workflowId arbitrario.
+- lista de bases.
+
+Validaciones del servidor inmediatamente antes de ejecutar:
+
+1. El plan existe y no expiró.
+2. El catalogHash sigue vigente.
+3. La BD sigue enabled=true.
+4. Es exactamente una BD.
+5. El workflow se resuelve otra vez desde databases.json.
+6. No es ScHmSyNcOrCh0001.
+7. No es Softland.
+8. No hay otra corrida activa para esa BD.
+9. El modo del servidor permite ejecución.
+10. La solicitud contiene autorización humana válida.
+
+La herramienta debe anunciar en tools/list:
+
+    "_meta": {
+      "anthropic/requiresUserInteraction": true
+    }
+
+Esto obliga a Claude Code 2.1.199 o superior a solicitar aprobación humana
+para cada llamada, incluso si existe una regla allow más amplia.
+
+La salida inicial debe devolver rápidamente:
+
+    accepted
+    runId
+    database
+    workflowId
+    startedAt
+
+La ejecución larga se consulta después con schema_sync_get_run_status. No se
+recomienda mantener una única llamada bloqueada durante toda la corrida.
+
+8.3 Auditoría obligatoria
+
+Registrar cada intento de ejecución con:
+
+- timestamp UTC
+- usuario o identidad autenticada
+- session/client id cuando esté disponible
+- planId
+- database
+- catalogHash
+- workflowId resuelto
+- resultado accepted/rejected
+- motivo de rechazo
+- runId
+- estado final
+
+Nunca registrar:
+
+- contraseñas
+- PAT
+- bearer tokens
+- connection strings completas
+- contenido de webhooks
+
+======================================================================
+9. GUARDRAILS DEL SERVIDOR INTERNO
+======================================================================
+
+Los guardrails deben existir en código; no depender solamente del prompt.
+
+1. Catálogo fijo
+   Resolver BD, repo y workflow únicamente desde databases.json.
+
+2. Rutas permitidas
+   Permitir lectura solamente bajo las rutas configuradas de schema-sync,
+   results y specs. Resolver ruta canónica antes de acceder.
+
+3. Sin shell genérico
+   Llamar a un servicio tipado o a un wrapper fijo. Nunca concatenar texto
+   del usuario en un comando.
+
+4. Sin SQL genérico
+   El MCP no recibe ni ejecuta consultas SQL. La extracción continúa dentro
+   de SchemaSyncTool con sus garantías actuales.
+
+5. Una sola BD
+   El contrato no acepta arrays y rechaza comas, comodines, all o batch.
+
+6. Plan antes de ejecutar
+   Un plan expira, queda asociado al hash del catálogo y se vuelve a validar.
+
+7. Exclusión explícita
+   Rechazar ScHmSyNcOrCh0001 y Softland aunque una entrada o prompt intente
+   forzarlos.
+
+8. Idempotencia
+   Utilizar una clave de idempotencia por plan para evitar doble ejecución
+   por reintentos del cliente.
+
+9. Bloqueo por BD
+   Mantener un lock por database mientras haya una corrida activa.
+
+10. Timeout
+    Aplicar timeout de conexión y de operación. Una expiración no debe
+    disparar una segunda corrida automática.
+
+11. Redacción
+    Redactar secretos y parámetros sensibles en errores, logs y respuestas.
+
+12. Modo read-only por defecto
+    Si SCHEMA_SYNC_MODE no es execute, execute_one debe rechazar la llamada.
+
+13. Autenticación y autorización
+    En HTTP privado, autenticar al cliente y autorizar específicamente la
+    capacidad schema-sync.execute-one.
+
+14. Sin confianza en Claude
+    Tratar todos los argumentos del modelo como entrada no confiable.
+
+======================================================================
+10. CONFIGURACIÓN DEL MCP INTERNO
+======================================================================
+
+10.1 Desarrollo local en modo de solo lectura
+
+Agregar al mismo .mcp.json:
+
+    {
+      "mcpServers": {
+        "azure-devops": {
+          "type": "stdio",
+          "command": "npx",
+          "args": [
+            "-y",
+            "@azure-devops/mcp",
+            "Shared-Service-GM",
+            "-d",
+            "core",
+            "repositories",
+            "pipelines"
+          ]
+        },
+        "schema-sync": {
+          "type": "stdio",
+          "command": "dotnet",
+          "args": [
+            "run",
+            "--project",
+            "${CLAUDE_PROJECT_DIR:-.}/automation/schema-sync/SchemaSyncMcpServer/SchemaSyncMcpServer.csproj"
+          ],
+          "env": {
+            "SCHEMA_SYNC_MODE": "read-only"
+          },
+          "timeout": 600000
+        }
+      }
+    }
+
+CLAUDE_PROJECT_DIR se entrega al proceso MCP. En una configuración de
+proyecto se utiliza el valor predeterminado :- . porque la expansión del
+archivo ocurre antes de iniciar el proceso.
+
+El modo local inicial debe ofrecer todas las consultas y validaciones, pero
+schema_sync_execute_one debe responder que la ejecución está deshabilitada.
+
+10.2 Operación privada mediante HTTP
+
+Cuando el servidor ya esté probado, desplegarlo en la red privada cerca de:
+
+    /home/soporte/schema-sync/
+
+Exponer un endpoint HTTPS interno, por ejemplo mediante un reverse proxy
+administrado. El nombre real y el certificado deben definirlos Infraestructura
+y Seguridad. No utilizar directamente http://172.16.2.60 sin autenticación.
+
+Configuración de ejemplo:
+
+    {
+      "mcpServers": {
+        "schema-sync": {
+          "type": "http",
+          "url": "${SCHEMA_SYNC_MCP_URL}",
+          "headers": {
+            "Authorization": "Bearer ${SCHEMA_SYNC_MCP_TOKEN}"
+          },
+          "timeout": 600000
+        }
+      }
+    }
+
+Definir SCHEMA_SYNC_MCP_URL y SCHEMA_SYNC_MCP_TOKEN fuera del repositorio.
+No incluir el token real en .mcp.json, settings.json, CLAUDE.md o la Skill.
+
+El timeout de 600000 ms corresponde a diez minutos por herramienta. Como la
+ejecución debe devolver runId rápidamente, normalmente solo las consultas de
+estado prolongadas necesitarían ese límite.
+
+======================================================================
+11. CAMBIO SUGERIDO EN CLAUDE.md
+======================================================================
+
+Agregar una sección equivalente a la siguiente, sin duplicar las reglas ya
+existentes:
+
+    ## Uso de MCP en Schema Sync
+
+    - Trabajar en modo consulta o planificación por defecto.
+    - Preferir el MCP schema-sync para catálogo, resultados, planificación,
+      validación y estado de corridas.
+    - Preferir el MCP azure-devops para consultar repositorios, ramas, PR,
+      commits, builds y logs.
+    - No utilizar herramientas de escritura del MCP azure-devops.
+    - No utilizar Bash, PowerShell, curl o llamadas HTTP manuales como un
+      segundo camino para una operación ya ofrecida por schema-sync.
+    - Nunca ejecutar una sincronización al responder una consulta, revisión
+      o diagnóstico.
+    - Para ejecutar una BD:
+      1. llamar schema_sync_plan_run;
+      2. mostrar database, repo, workflow, efectos y advertencias;
+      3. esperar autorización explícita del usuario;
+      4. llamar una sola vez schema_sync_execute_one con planId;
+      5. consultar schema_sync_get_run_status;
+      6. verificar result JSON, PR y build;
+      7. reportar evidencias y cualquier inconsistencia.
+    - No ejecutar ScHmSyNcOrCh0001.
+    - No ejecutar más de una BD.
+    - No habilitar Softland, bases o schedules.
+    - Para una BD nueva, evaluar primero si el repo necesita cascarón SSDT.
+      No proponer catálogo o n8n hasta que el cascarón compile y el esquema
+      haya sido importado o exista un camino de import validado.
+    - Si MCP no está disponible, diagnosticar la conexión. No sustituir una
+      ejecución MCP fallida por un comando manual sin nueva autorización.
+
+======================================================================
+12. CAMBIO SUGERIDO EN LA SKILL
+======================================================================
+
+En .claude/skills/manage-schema-sync-ssdt/SKILL.md agregar una sección breve:
+
+    ## Seleccionar herramientas
+
+    Utilizar schema-sync como interfaz preferida para leer el catálogo,
+    normalizar resultados, preparar planes, validar specs y consultar runs.
+
+    Utilizar azure-devops únicamente para verificar repositorios, ramas,
+    commits, PR, builds y logs en modo de lectura.
+
+    Mantener SchemaSyncTool como motor del dominio. No reimplementar su
+    lógica dentro de la Skill ni mediante comandos ad hoc.
+
+    Antes de una ejecución real:
+
+    1. Ejecutar schema_sync_plan_run para una BD exacta.
+    2. Mostrar al usuario el plan y sus efectos externos.
+    3. Esperar una autorización explícita para ese plan.
+    4. Ejecutar schema_sync_execute_one una sola vez.
+    5. Consultar estado y validar las evidencias.
+
+    Nunca utilizar el MCP para SQL arbitrario, batch, orquestador, schedules,
+    Softland, completar PR o publicar una BD.
+
+    Para un repo nuevo o con solo README:
+
+    1. Confirmar que no existe ya un .sqlproj.
+    2. Crear el cascarón con ProjectGuid nuevo.
+    3. Preservar el README existente.
+    4. Validar .gitignore y build-dacpac.ps1.
+    5. Compilar con cero errores.
+    6. Seleccionar Import o DACPAC + Compare según el tamaño.
+    7. No tocar databases.json o n8n hasta validar el import.
+    8. No hacer commit o push del cascarón sin autorización explícita.
+
+La Skill debe mantenerse concisa. Los contratos detallados pueden vivir en:
+
+    .claude/skills/manage-schema-sync-ssdt/references/mcp-tools.md
+
+No copiar databases.json ni la lista actual de bases a ese archivo.
+
+======================================================================
+13. PAPEL DE LOS AGENTES
+======================================================================
+
+schema-sync-reviewer
+
+- Solo lectura.
+- Revisa cambios en SchemaSyncTool, MCP, catálogo, hooks y workflows.
+- Verifica que no aparezcan capacidades SQL de escritura.
+- Verifica el mapping BD/repo/proyecto/workflow.
+- Verifica que ADO MCP siga sin camino de escritura.
+- Revisa que execute_one no acepte command, SQL o workflow arbitrario.
+- Presenta hallazgos; no ejecuta una corrida.
+
+schema-sync-diagnoser
+
+- Solo lectura.
+- Consulta result JSON, build y logs.
+- Identifica la primera fase que falló.
+- Distingue causa primaria de errores secundarios.
+- Correlaciona commit, PR y build.
+- Propone el cambio mínimo.
+- No vuelve a ejecutar y no modifica SQL.
+
+No es necesario crear un agente para cada herramienta. La Skill coordina el
+flujo principal y delega solo cuando una revisión o diagnóstico independiente
+aporta valor.
+
+======================================================================
+14. PAPEL DE LOS HOOKS
+======================================================================
+
+Los hooks existentes continúan siendo necesarios:
+
+- schema-sync-security-gate.ps1 controla comandos Bash/PowerShell peligrosos.
+- schema-sync-post-validate.ps1 valida archivos después de modificaciones.
+- schema-sync-stop-validate.ps1 impide finalizar con cambios inválidos.
+
+Agregar MCP introduce una diferencia importante:
+
+Una llamada MCP no necesariamente pasa por Bash. Por eso la seguridad debe
+aplicarse en cuatro niveles:
+
+1. permissions.deny y permissions.ask de Claude Code.
+2. anthropic/requiresUserInteraction en execute_one.
+3. PreToolUse hook opcional para revisar el input MCP.
+4. GuardrailService obligatorio dentro de SchemaSyncMcpServer.
+
+El hook opcional no debe sustituir la validación del servidor. Su función es
+mostrar un rechazo temprano y legible si una llamada no contiene planId, si
+parece batch o si intenta usar un workflow prohibido.
+
+======================================================================
+15. CÓMO SERÁ LA CONVERSACIÓN DIARIA CON CLAUDE
+======================================================================
+
+15.1 Consultar estado sin ejecutar
+
+Usuario:
+
+    Revisa el estado actual de buklo_lab. Usa el catálogo, el último result
+    JSON y Azure DevOps. No ejecutes nada.
+
+Comportamiento esperado:
+
+1. Claude obtiene el registro desde databases.json mediante schema-sync.
+2. Lee el último resultado normalizado.
+3. Consulta PR y build mediante azure-devops.
+4. Reporta estado, drift, commit, PR, build y discrepancias.
+5. No solicita permiso de ejecución porque no se ejecuta nada.
+
+15.2 Preparar una corrida
+
+Usuario:
+
+    Prepara el plan para ejecutar OpsObservability, pero todavía no lo
+    ejecutes.
+
+Comportamiento esperado:
+
+1. Claude llama schema_sync_plan_run.
+2. Presenta algo equivalente a:
+
+       BD: OpsObservability
+       Enabled: true
+       Repo: project_OpsObservability
+       Workflow: Schema Sync OpsObservability
+       Tipo: una sola BD
+       Efectos: puede cambiar archivos SSDT, hacer push a main,
+                crear/reutilizar PR main -> release y notificar Teams
+       SQL: solo lectura
+       Plan: <planId>
+       Expira: <fecha/hora>
+
+3. Claude finaliza sin ejecutar.
+
+15.3 Ejecutar el plan
+
+Usuario:
+
+    Autoriza y ejecuta el plan <planId> para OpsObservability.
+
+Comportamiento esperado:
+
+1. Claude vuelve a resumir la operación concreta.
+2. Claude Code muestra la aprobación obligatoria de la herramienta.
+3. El usuario aprueba en la interfaz.
+4. Claude llama schema_sync_execute_one una sola vez.
+5. Recibe runId.
+6. Consulta schema_sync_get_run_status.
+7. Al finalizar, verifica result JSON, PR y build.
+8. Presenta un resumen con evidencias.
+
+Si el usuario no aprueba la herramienta, no se ejecuta nada.
+
+15.4 Diagnosticar SQL71501
+
+Usuario:
+
+    Diagnostica el SQL71501 de la última corrida de sqldb_core_workflow.
+    No modifiques archivos y no vuelvas a ejecutar.
+
+Comportamiento esperado:
+
+1. Se utiliza schema-sync-diagnoser.
+2. Se lee el resultado y el build correspondiente.
+3. Se revisa el bundle core-workflow-global y el orden global/workflow.
+4. Se identifica la referencia no resuelta.
+5. Se propone el cambio mínimo sin ejecutarlo.
+
+15.5 Incorporar una nueva BD
+
+Usuario:
+
+    Crea una spec de onboarding para <BD>. Primero determina si el repo está
+    vacío, tiene solo README o ya contiene un proyecto SSDT. Déjala disabled
+    y prepara solo el dry-run; no crees el workflow ni actives el schedule.
+
+Comportamiento esperado:
+
+1. Claude utiliza la plantilla de docs/specs.
+2. Recopila nombre real, servidor, repo, sqlproj, workflow y acceso read-only.
+3. Si falta el proyecto, prepara el cascarón SSDT con GUID nuevo y build
+   limpio antes de continuar.
+4. Para una BD grande, evalúa DACPAC + Compare en vez de Compare live.
+5. Propone la entrada enabled=false solamente después del import validado.
+6. Valida la spec con schema_sync_validate_onboarding.
+7. No activa n8n ni schedules.
+
+15.6 Solicitud que debe rechazarse
+
+Usuario:
+
+    Ejecuta todas las bases habilitadas y completa los PR.
+
+Respuesta esperada:
+
+    No puedo ejecutar un batch ni completar PR dentro de este flujo. Puedo
+    preparar el estado de las bases o un plan para una sola BD exacta.
+
+15.7 Softland
+
+Usuario:
+
+    Revisa qué falta para incorporar Softland. No la habilites.
+
+Comportamiento esperado:
+
+- Leer el contexto especial.
+- Recordar que vive en 172.16.2.26 y no en el MI.
+- Revisar el DACPAC y proyecto disponibles.
+- Preparar brechas y validaciones.
+- No crear plan ejecutable.
+- No agregarla a databases.json ni n8n.
+
+======================================================================
+16. RESPUESTA ESTÁNDAR DESPUÉS DE UNA CORRIDA
+======================================================================
+
+Claude debería presentar siempre:
+
+    BD:
+    Run ID:
+    Estado:
+    Fase final:
+    Drift detectado:
+    Commit:
+    PR:
+    Build:
+    Notificación:
+    Inicio/fin:
+    Evidencias consultadas:
+    Advertencias o inconsistencias:
+
+No afirmar éxito solamente porque existe commit o PR. El estado final debe
+considerar buildOk, asserts, result JSON y cualquier error posterior.
+
+======================================================================
+17. PLAN DE IMPLEMENTACIÓN POR FASES
+======================================================================
+
+Fase 0 - Preparar branch
+
+- Guardar los documentos actuales.
+- Crear una branch de trabajo.
+- Confirmar que los hooks existentes continúan funcionando.
+- No realizar ninguna corrida durante la instalación.
+- Incorporar el checklist de cascarón SSDT a la spec de onboarding.
+
+Fase 1 - Azure DevOps MCP en solo lectura
+
+- Instalar el servidor oficial en modo project.
+- Cargar solo core, repositories y pipelines.
+- Autenticar con una identidad de solo lectura.
+- Aplicar los deny de herramientas de escritura.
+- Probar listados de proyecto, repo, PR y build.
+- Verificar que crear PR, rama o pipeline esté bloqueado.
+
+Fase 2 - SchemaSyncMcpServer de lectura
+
+- Crear el proyecto .NET.
+- Implementar CatalogService y ResultService.
+- Implementar list, get, last-result y validate-catalog.
+- Ejecutar pruebas unitarias con fixtures sin secretos.
+- Configurar stdio con SCHEMA_SYNC_MODE=read-only.
+- Probar desde /mcp.
+
+Fase 3 - Planificación segura
+
+- Implementar PlanService.
+- Emitir planId opaco con expiración y catalogHash.
+- Implementar lock y detección de run activo.
+- Rechazar Softland, batch y orquestador.
+- Probar que plan_run nunca dispara n8n.
+
+Fase 4 - Ejecución controlada
+
+- Implementar N8nService contra un endpoint interno aprobado.
+- Implementar execute_one únicamente con planId.
+- Marcar la herramienta requiresUserInteraction.
+- Agregar permissions.ask.
+- Registrar auditoría e idempotencia.
+- Probar primero contra un workflow simulado.
+
+Fase 5 - Piloto real
+
+- Desplegar el MCP por HTTPS en red privada.
+- Probar autenticación y autorización.
+- Seleccionar una BD piloto ya validada.
+- Preparar plan.
+- Obtener aprobación humana.
+- Ejecutar una vez.
+- Verificar result JSON, Git, PR, build y Teams.
+
+Fase 6 - Uso del equipo
+
+- Documentar variables de entorno sin valores secretos.
+- Revisar permisos por rol.
+- Capacitar con los ejemplos de conversación.
+- Observar fallos y mejorar contratos, no prompts ad hoc.
+
+Fase 7 - Plugin, solamente si aporta valor
+
+Crear un plugin cuando:
+
+- El patrón de archivos ya esté estable.
+- La Skill y los hooks hayan sido probados varias veces.
+- El MCP tenga una versión publicada y compatible.
+- Varios repositorios o equipos necesiten instalar el mismo paquete.
+
+El plugin podría empaquetar:
+
+- CLAUDE.md parcial o instrucciones de instalación.
+- Skill.
+- Agentes.
+- Hooks.
+- Configuración MCP sin secretos.
+- Comandos de validación.
+
+No debe empaquetar databases.json, tokens, PAT, webhooks o connection strings.
+
+======================================================================
+18. PRUEBAS DE ACEPTACIÓN
+======================================================================
+
+MCP Azure DevOps:
+
+- [ ] Lista el proyecto Database-Administration-and-Monitoring.
+- [ ] Consulta un repo conocido.
+- [ ] Consulta un PR conocido.
+- [ ] Consulta build y logs.
+- [ ] repo_pull_request_write está bloqueado.
+- [ ] repo_pull_request_thread_write está bloqueado.
+- [ ] repo_create_branch está bloqueado.
+- [ ] pipelines_write está bloqueado.
+- [ ] La identidad no tiene permisos efectivos de escritura innecesarios.
+
+MCP Schema Sync - lectura:
+
+- [ ] Lee databases.json sin modificarlo.
+- [ ] Resuelve nombre real, repo, proyecto y workflow.
+- [ ] Rechaza una BD inexistente.
+- [ ] Normaliza un result JSON válido.
+- [ ] Maneja result ausente sin inventar estado.
+- [ ] Redacta secretos en errores.
+- [ ] validate_catalog detecta duplicados y campos faltantes.
+
+MCP Schema Sync - planificación:
+
+- [ ] plan_run no produce efectos externos.
+- [ ] Rechaza enabled=false.
+- [ ] Rechaza Softland.
+- [ ] Rechaza ScHmSyNcOrCh0001.
+- [ ] Rechaza listas, comodines y batch.
+- [ ] El plan contiene catalogHash y expiración.
+- [ ] Un cambio de catálogo invalida el plan.
+
+Cascarón SSDT y onboarding:
+
+- [ ] Un repo vacío o con solo README se identifica como candidato.
+- [ ] Un repo con .sqlproj existente no recibe un cascarón nuevo.
+- [ ] El README existente se preserva.
+- [ ] Se genera un ProjectGuid nuevo.
+- [ ] build-dacpac.ps1 termina con cero errores.
+- [ ] bin, obj, out y *.dacpac permanecen fuera de Git.
+- [ ] Una BD grande puede seleccionar Source=DACPAC y Target=proyecto.
+- [ ] No se propone enabled=true o n8n antes de validar el import.
+
+MCP Schema Sync - ejecución:
+
+- [ ] execute_one no acepta database, workflowId o command arbitrarios.
+- [ ] execute_one exige un plan válido.
+- [ ] Claude Code solicita aprobación en cada llamada.
+- [ ] Una denegación humana no ejecuta nada.
+- [ ] Un plan no puede ejecutarse dos veces accidentalmente.
+- [ ] Solo existe una corrida activa por BD.
+- [ ] Devuelve runId y permite consultar estado.
+- [ ] Nunca ejecuta SQL arbitrario.
+- [ ] Nunca publica hacia una BD.
+- [ ] Nunca ejecuta batch.
+- [ ] Nunca completa PR.
+- [ ] Registra auditoría sin secretos.
+
+Flujo E2E:
+
+- [ ] El resultado de SchemaSyncTool coincide con el MCP.
+- [ ] commitSha existe en Azure DevOps cuando hadDrift=true.
+- [ ] prUrl corresponde al repo correcto.
+- [ ] El PR es main -> release y no tiene autocomplete.
+- [ ] buildOk coincide con Azure DevOps.
+- [ ] Un error de build se reporta como error aunque exista PR.
+- [ ] Teams recibe la notificación esperada.
+
+======================================================================
+19. CRITERIOS DE LISTO PARA PRODUCCIÓN
+======================================================================
+
+No habilitar execute_one para uso normal hasta cumplir todo lo siguiente:
+
+- MCP de Azure DevOps probado en solo lectura.
+- SchemaSyncMcpServer cubierto por pruebas unitarias.
+- Guardrails ejecutados del lado servidor.
+- Autenticación y autorización revisadas.
+- HTTPS interno válido.
+- Auditoría e idempotencia activas.
+- Plan con expiración y hash de catálogo.
+- Aprobación forzada por herramienta.
+- BD piloto completada y verificada.
+- Procedimiento de rollback del MCP documentado.
+- El flujo manual anterior sigue disponible para operación autorizada.
+
+Rollback del MCP significa deshabilitar el servidor en /mcp o retirar su
+endpoint. No implica revertir SchemaSyncTool ni activar otro camino automático.
+
+======================================================================
+20. DECISIÓN FINAL
+======================================================================
+
+Implementar ahora:
+
+1. La estructura de Claude Code ya propuesta.
+2. MCP oficial de Azure DevOps en modo de lectura.
+3. MCP interno .NET comenzando por catálogo, resultados y planificación.
+4. Ejecución real únicamente después de completar los guardrails y pruebas.
+
+No implementar ahora:
+
+- Plugin general.
+- MCP SQL.
+- Shell genérico.
+- Automatización que cree cascarón, catálogo y n8n en un único paso.
+- Batch.
+- Autocomplete o finalización de PR.
+- Activación automática de schedules.
+- Softland en el flujo automatizado.
+
+Esta combinación ofrece velocidad sin colocar la seguridad en manos del
+prompt. Claude tendrá acceso directo al estado real, pero las operaciones
+permitidas seguirán siendo pequeñas, explícitas, auditables y reversibles.
+
+======================================================================
+21. FUENTES OFICIALES CONSULTADAS
+======================================================================
+
+Claude Code - MCP:
+https://code.claude.com/docs/en/mcp
+
+Claude Code - permisos:
+https://code.claude.com/docs/en/permissions
+
+Claude Code - seguridad:
+https://code.claude.com/docs/en/security
+
+Microsoft Azure DevOps MCP:
+https://github.com/microsoft/azure-devops-mcp
+
+Microsoft Azure DevOps MCP - Getting Started:
+https://github.com/microsoft/azure-devops-mcp/blob/main/docs/GETTINGSTARTED.md
+
+Microsoft Azure DevOps MCP - Toolset:
+https://github.com/microsoft/azure-devops-mcp/blob/main/docs/TOOLSET.md
+
+SDK oficial MCP para C#:
+https://github.com/modelcontextprotocol/csharp-sdk
+
+Documentación del SDK MCP para C#:
+https://csharp.sdk.modelcontextprotocol.io/
+
+Model Context Protocol - crear un servidor:
+https://modelcontextprotocol.io/docs/2026-07-28/develop/build-server
+
+======================================================================
+FIN DEL DOCUMENTO
+======================================================================

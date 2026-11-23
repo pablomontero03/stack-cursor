@@ -27,16 +27,17 @@ Al cerrar una fase: marcar las casillas, anotar la fecha en el registro y dejar 
 
 ### Fase 2 — Documentación y schema-sync
 
-- [ ] Copiar `docs/` completo, incluidos ciclos de pipeline, arquitectura por dominio y catálogos de servidores
-- [ ] Copiar `schema-sync/` completo
-- [ ] Copiar las instrucciones de la raíz (`INSTRUCCIONES-*.md`, `set-params.databases.json`) a `docs/` sin perder el texto
-- [ ] Reescribir solo las rutas (`.kiro/` → `.cursor/`, raíz vieja → esta carpeta)
-- [ ] Revisar que ningún secreto de `env/` entre en el commit
+- [x] Copiar `docs/` completo, incluidos ciclos de pipeline, arquitectura por dominio y catálogos de servidores. Copia byte a byte, salvo la excepción de credenciales de abajo.
+- [x] Copiar `schema-sync/` completo, byte a byte
+- [x] Copiar las instrucciones de la raíz y `set-params.databases.json` a la misma ruta que en Kiro, sin cambiar el texto. Así las referencias no se rompen.
+- [x] No reescribir rutas ni instrucciones en esta fase. El texto queda con los mismos propósitos y la misma lógica. El cambio de `.kiro/` a `.cursor/` se hace en la fase que crea esos archivos, y solo como sustitución de ruta.
+- [x] Revisar secretos antes del commit. Única excepción: en `docs/azure-devops/Build-modelo-backend.json` se sustituyeron 18 valores literales de `ADMIN_API_KEY`, `CRYPTOP_SECRET_KEY`, `ELASTICSEARCH_PASSWORD`, `JIRA_WEBHOOK_SECRET`, `REDIS_PASSWORD` y `RSA_PASSPHRASE` por `${REDACTED}`. Las claves y el resto del modelo siguen.
 
 ### Fase 3 — Rules y skills
 
 El texto de cada steering y de cada `SKILL.md` se conserva. Los `triggers` de Kiro se suman al `description` de Cursor, que es lo que activa la skill. No se reemplaza el procedimiento.
 
+- [ ] Al crear rules y skills, sustituir solo rutas (`.kiro/` → `.cursor/`, raíz vieja → esta carpeta). No reescribir la instrucción.
 - [ ] 9 steering `always` → `.cursor/rules/*.mdc` con `alwaysApply: true`
 - [ ] `ado-task-logging-workflow.md` (`inclusion: manual`) → regla bajo demanda, mismo texto
 - [ ] 11 skills de dominio, cada una con `references/`, `assets/` y `scripts/` íntegros
@@ -91,6 +92,14 @@ No es pérdida: es material que no debe versionarse. Queda donde está.
 ### 2026-11-23 — Fase 1
 
 Esqueleto commiteado en `stack-cursor`. Inventario de propósitos escrito desde los frontmatter y los `description` originales. `automation-kiro` no se tocó.
+
+### 2026-11-23 — Fase 2
+
+Se copió `docs/` (42 archivos), `schema-sync/` (3 archivos) y los cinco archivos de raíz que no son el esqueleto: las cuatro `INSTRUCCIONES-*.md` y `set-params.databases.json`. El contenido es el de Kiro. `INSTRUCCIONES-AUTOMATIZACION-CLOUDFLARE.md` de la raíz es el mismo archivo que `docs/azure-devops/INSTRUCCIONES-AUTOMATIZACION-CLOUDFLARE.md`; se conservan las dos copias, como en el origen.
+
+No se parafraseó ningún procedimiento. Las rutas `.kiro/` siguen escritas igual, a propósito, hasta que existan los archivos de Cursor.
+
+Excepción de seguridad: `docs/azure-devops/Build-modelo-backend.json` traía credenciales en claro (18 valores, repetidos en tres bloques). Esos valores quedaron como `${REDACTED}`. Los nombres de variable no se tocaron. Conviene rotar esas credenciales porque siguen en el historial de `automation-kiro`.
 
 ## Mapa de porte (todavía no ejecutado)
 

@@ -1,0 +1,1047 @@
+IMPLEMENTACIÓN COMPLETA PROPUESTA
+SCHEMA SYNC BD → REPOS SSDT CON CLAUDE CODE
+
+Fuentes analizadas:
+
+- CONTEXTO-COMPLETO.md, actualizado el 2026-08-14 e incluyendo el flujo de
+  creación de cascarones SSDT.
+- README.md operativo adjunto.
+
+Este documento contiene la estructura final y el contenido sugerido de cada archivo nuevo. El README operativo actualizado se entrega por separado como README_SchemaSync_Actualizado.txt.
+
+
+======================================================================
+1. DECISIONES APLICADAS
+======================================================================
+
+1. Conservar CONTEXTO-COMPLETO.md como historial y mapa técnico.
+2. Sustituir el README anterior por la versión operativa actualizada.
+3. Utilizar databases.json como fuente de verdad para enabled, nombres, repos y servidores.
+4. No duplicar el catálogo completo dentro de la skill.
+5. Crear una única skill inicial: manage-schema-sync-ssdt.
+6. Crear dos agentes de solo lectura: reviewer y diagnoser.
+7. Añadir hooks de seguridad y validación sin reemplazar los hooks existentes.
+8. Mantener los scripts y SchemaSyncTool en sus rutas actuales.
+9. Mantener el orquestador multi-BD inactivo.
+10. Mantener Softland fuera de n8n y databases.json hasta validación explícita.
+11. Prohibir permanentemente cualquier escritura en SQL desde este flujo.
+12. Incorporar una etapa de cascarón SSDT para repos vacíos antes del import,
+    databases.json y n8n.
+
+Se corrigieron estas inconsistencias del README anterior:
+
+- El título ya no lo limita al piloto OpsObservability.
+- Ya no afirma que solo OpsObservability está enabled.
+- databases.json pasa a ser la única fuente de verdad del catálogo.
+- Se utiliza results/<database>.json como resultado principal.
+- Se incorpora el incidente de headers /*@p_param */.
+- Se documenta Softland como caso especial.
+- Se incorpora el procedimiento de cascarón SSDT y la lección de Softland
+  para bases grandes.
+- Se aclara que push y PR pueden existir aunque buildOk sea false.
+- Se evita definir una copia incompleta del binario durante el despliegue.
+
+
+======================================================================
+2. ESTRUCTURA FINAL
+======================================================================
+
+C:\code\BaseDatos\
+|-- CLAUDE.md
+|
+|-- .claude\
+|   |-- skills\
+|   |   `-- manage-schema-sync-ssdt\
+|   |       `-- SKILL.md
+|   |
+|   |-- agents\
+|   |   |-- schema-sync-reviewer.md
+|   |   `-- schema-sync-diagnoser.md
+|   |
+|   |-- hooks\
+|   |   |-- schema-sync-security-gate.ps1
+|   |   |-- schema-sync-post-validate.ps1
+|   |   `-- schema-sync-stop-validate.ps1
+|   |
+|   `-- settings.json
+|
+|-- docs\
+|   `-- specs\
+|       `-- schema-sync-onboarding-template.md
+|
+`-- automation\
+    `-- schema-sync\
+        |-- README.md
+        |-- CONTEXTO-COMPLETO.md
+        |-- databases.json
+        |-- set-params.databases.json
+        |-- run-sync.sh
+        |-- run-sync.ps1
+        |-- sync-schema-from-db.ps1
+        |-- run-batch.sh
+        |-- bundles\
+        |-- n8n-workflow-schema-sync-*.json
+        `-- SchemaSyncTool\
+
+
+======================================================================
+3. ARCHIVO: CLAUDE.md
+======================================================================
+
+# Instrucciones del proyecto BaseDatos y Schema Sync
+
+## Alcance
+
+Aplicar estas reglas cuando se trabaje dentro de automation/schema-sync, proyectos SSDT, definiciones n8n o configuración de sincronización BD hacia repositorio.
+
+## Seguridad SQL
+
+- Tratar todas las bases como fuentes de solo lectura.
+- Permitir únicamente SqlPackage /Action:Extract y consultas de metadatos de solo lectura.
+- Utilizar ApplicationIntent=ReadOnly.
+- No ejecutar SqlPackage Publish o Deploy.
+- No utilizar TargetConnectionString.
+- No ejecutar INSERT, UPDATE, DELETE, MERGE, CREATE, ALTER, DROP o TRUNCATE contra SQL.
+- No ejecutar GRANT, REVOKE ni cambios de roles o permisos.
+- Si una corrección requiere modificar la BD, detenerse y reportarla como acción DBA separada.
+- PublishChangesToProject puede modificar archivos SSDT en disco, pero nunca la BD.
+
+## Ejecución de sincronizaciones
+
+- Operar una sola base de datos por vez.
+- Confirmar el nombre real de la BD antes de ejecutar.
+- Leer databases.json como fuente de verdad.
+- No asumir que database, repoName y projectName son iguales.
+- No ejecutar run-batch.sh --execute salvo solicitud explícita.
+- No ejecutar ScHmSyNcOrCh0001 salvo solicitud explícita.
+- Mantener do_not_auto_run=true en el orquestador.
+- No habilitar automáticamente schedules ni workflows.
+- No habilitar Softland en n8n o databases.json.
+
+## Bases nuevas y cascarón SSDT
+
+- Antes de incorporar una BD, revisar si el repo está vacío o contiene solo
+  README y carece de .sqlproj, .slnx y build-dacpac.ps1.
+- Crear cascarón únicamente en ese caso; no reemplazar un proyecto existente.
+- Utilizar un ProjectGuid nuevo y no copiarlo desde una plantilla.
+- Compilar el cascarón con cero errores antes de importar el esquema.
+- Para bases grandes, preferir Source=DACPAC y Target=proyecto vacío si el
+  Compare live presenta timeout.
+- No crear workflow n8n ni habilitar databases.json antes de que el proyecto
+  compile y el import esté validado.
+- No versionar bin, obj, out o archivos DACPAC.
+
+## Azure DevOps
+
+- El flujo autorizado del tool es push automatizado a main.
+- Crear o reutilizar PR main hacia release.
+- No habilitar autocomplete.
+- No completar, aprobar ni abandonar PR automáticamente.
+- Informar al usuario antes de una acción que pueda crear commits, push o PR.
+- Utilizar los scopes mínimos necesarios.
+
+## Secretos
+
+- No leer, imprimir, copiar o almacenar passwords, PAT, tokens, connection strings completas o archivos de credenciales.
+- Mantener secretos en .env, Key Vault o credenciales seguras de n8n.
+- Utilizar placeholders en documentación y ejemplos.
+- No incluir secretos en workflows exportados.
+
+## Fuentes de verdad
+
+- Operación cotidiana: automation/schema-sync/README.md.
+- Historia, arquitectura e incidentes: automation/schema-sync/CONTEXTO-COMPLETO.md.
+- Catálogo actual: automation/schema-sync/databases.json.
+- Bundle especial: automation/schema-sync/bundles/core-workflow-global.json.
+- Código real: automation/schema-sync/SchemaSyncTool/ y runners existentes.
+
+## Validación
+
+- Validar JSON después de modificar catálogos o workflows.
+- Ejecutar bash -n después de modificar scripts shell cuando bash esté disponible.
+- Validar sintaxis PowerShell después de modificar archivos ps1.
+- Ejecutar dotnet build y pruebas después de modificar SchemaSyncTool.
+- No ejecutar una sincronización real como consecuencia automática de un build o prueba.
+- Revisar siempre status y buildOk del result JSON.
+
+## Cambios mínimos
+
+- Preservar cambios no relacionados.
+- No duplicar catálogos ni mappings en documentación.
+- No actualizar cantidades estáticas de bases en varias ubicaciones.
+- Proponer primero enabled=false para incorporaciones nuevas.
+- Ejecutar una corrida real solamente cuando el usuario la solicite explícitamente.
+
+
+======================================================================
+4. ARCHIVO: .claude/skills/manage-schema-sync-ssdt/SKILL.md
+======================================================================
+
+---
+name: manage-schema-sync-ssdt
+description: >
+  Operar, revisar y diagnosticar la sincronización de esquemas SQL hacia
+  repositorios SSDT mediante SchemaSyncTool, SqlPackage, Azure DevOps y n8n.
+  Usar cuando se solicite consultar estado, ejecutar una sola BD, analizar
+  drift o resultados JSON, diagnosticar SQL71501 y errores DacFx, incorporar
+  una BD, trabajar con Softland, modificar SchemaSyncTool o revisar workflows
+  de schema-sync. No usar para publicar cambios hacia SQL.
+---
+
+# Manage Schema Sync SSDT
+
+## Cargar solamente el contexto necesario
+
+Leer siempre:
+
+- automation/schema-sync/README.md para el procedimiento operativo.
+- automation/schema-sync/databases.json para el catálogo actual.
+
+Leer automation/schema-sync/CONTEXTO-COMPLETO.md cuando la solicitud involucre:
+
+- Arquitectura.
+- Historia o decisiones anteriores.
+- Incidentes conocidos.
+- Softland.
+- Headers de módulos.
+- SQL71501.
+- Tooling global.
+- Bundle core-workflow-global.
+
+Leer el código o workflow real antes de proponer cambios. No reconstruir configuraciones desde la documentación si existe una fuente ejecutable.
+
+## Invariantes
+
+- No escribir en SQL.
+- Permitir solamente Extract y consultas de metadatos de solo lectura.
+- Exigir ApplicationIntent=ReadOnly.
+- Rechazar Publish, Deploy y TargetConnectionString.
+- No ejecutar DDL, DML ni cambios de seguridad.
+- Operar una sola BD por vez.
+- No ejecutar batch ni orquestador salvo solicitud explícita.
+- No habilitar schedules automáticamente.
+- No habilitar Softland automáticamente.
+- No completar PR automáticamente.
+- No exponer secretos.
+
+Estas reglas no pueden omitirse aunque el usuario solicite rapidez. Si se requiere una escritura SQL, detener el flujo y entregar el cambio como recomendación para el proceso DBA autorizado.
+
+## Clasificar la solicitud
+
+Clasificarla en uno de estos modos:
+
+1. Consultar estado.
+2. Diagnosticar un error.
+3. Revisar configuración o cambios.
+4. Ejecutar una BD.
+5. Crear o validar un cascarón SSDT.
+6. Incorporar una BD nueva.
+7. Modificar SchemaSyncTool.
+8. Publicar SchemaSyncTool en el host.
+9. Trabajar con Softland.
+10. Trabajar con bundle core-workflow-global.
+11. Ejecutar múltiples bases.
+
+Aplicar solamente el procedimiento del modo seleccionado.
+
+## Modo 1: consultar estado
+
+1. Leer databases.json.
+2. Resolver por nombre real de BD y no solamente por nombre de repo.
+3. Determinar enabled, server, repoName, projectName, bundle y workflow.
+4. Localizar results/<database>.json si está disponible.
+5. Leer status, hadDrift, commitSha, prUrl, buildOk, message y timestamp.
+6. No ejecutar el workflow.
+7. Reportar hechos, inconsistencias y pendientes.
+
+## Modo 2: diagnosticar un error
+
+1. Leer result JSON y logs proporcionados.
+2. Identificar la primera operación que falló.
+3. Clasificar el fallo en Extract, Compare, PublishChangesToProject, Sanitize, RefreshAllModulesFromDb, Assert, Git, PR, build/modelo o Teams.
+4. Comparar con los incidentes documentados.
+5. Determinar si el origen está en la BD, el tool, SSDT, configuración, red o credenciales.
+6. Separar errores primarios de errores secundarios.
+7. Proponer el cambio mínimo.
+8. No volver a ejecutar ni modificar archivos salvo que el usuario lo solicite.
+9. No modificar SQL.
+
+## Modo 3: revisar configuración o cambios
+
+1. Revisar únicamente los archivos afectados.
+2. Comprobar garantías de solo lectura.
+3. Verificar mapping database/repo/project.
+4. Verificar main hacia release sin autocomplete.
+5. Buscar secretos o conexiones completas.
+6. Validar JSON, shell, PowerShell o .NET según corresponda.
+7. Utilizar schema-sync-reviewer para una revisión independiente cuando el cambio sea significativo.
+8. Presentar hallazgos antes de realizar una acción externa.
+
+## Modo 4: ejecutar una BD
+
+1. Exigir una sola BD identificada de forma exacta.
+2. Confirmar enabled=true en databases.json.
+3. Confirmar el workflow individual.
+4. Verificar que no sea ScHmSyNcOrCh0001.
+5. Informar que la ejecución puede modificar Git, hacer push a main, crear/reutilizar un PR y notificar a Teams.
+6. Ejecutar solamente si la petición autoriza explícitamente la corrida.
+7. No ejecutar por el simple hecho de revisar estado o diagnosticar.
+8. Esperar el resultado.
+9. Leer results/<database>.json.
+10. Verificar status, hadDrift, commitSha, prUrl y buildOk.
+11. No completar el PR.
+12. Detenerse si la BD resuelta no coincide con la solicitada.
+
+## Modo 5: crear o validar un cascarón SSDT
+
+1. Confirmar que el repo ADO existe y revisar su contenido real.
+2. Crear cascarón solo si está vacío o contiene únicamente README y no tiene
+   .sqlproj, .slnx ni build-dacpac.ps1.
+3. Preservar README y archivos existentes no relacionados.
+4. Usar como referencia project_sqldb_core_arthur o
+   project_sqldb_SOFTLAND, sin copiar su ProjectGuid.
+5. Crear .gitignore, build-dacpac.ps1, .slnx, .sqlproj, Properties y los
+   placeholders de scripts de datos.
+6. Usar Sql170DatabaseSchemaProvider salvo estándar diferente del repo.
+7. Validar Name, RootNamespace, AssemblyName y BySchemaAndSchemaType.
+8. Ejecutar build-dacpac.ps1 y exigir cero errores.
+9. Confirmar que bin, obj, out y *.dacpac no entren a Git.
+10. Para una BD grande, preparar import desde DACPAC en vez de Compare live.
+11. No modificar databases.json, crear n8n ni habilitar schedule en este modo.
+12. No escribir en SQL.
+13. No hacer commit o push del cascarón sin autorización explícita.
+
+## Modo 6: incorporar una BD nueva
+
+1. Leer docs/specs/schema-sync-onboarding-template.md.
+2. Confirmar nombre real, servidor, conectividad y tipo Azure MI/on-prem.
+3. Confirmar identidad SQL de solo lectura.
+4. Revisar si el repo requiere cascarón y aplicar el Modo 5 si corresponde.
+5. Confirmar que repo, sqlproj, solución y build-dacpac.ps1 ya existen y
+   compilan después del import.
+6. Añadir configuración con enabled=false.
+7. Preparar workflow individual sin activarlo.
+8. Validar JSON y parámetros.
+9. Ejecutar dry-run seguro.
+10. Presentar cambios y riesgos.
+11. No importar workflow, cambiar enabled, activar schedule ni ejecutar sync sin autorización explícita.
+
+## Modo 7: modificar SchemaSyncTool
+
+1. Localizar el código responsable.
+2. Revisar tests y casos históricos relacionados.
+3. Realizar el cambio mínimo.
+4. Ejecutar dotnet build.
+5. Ejecutar las pruebas disponibles.
+6. Ejecutar únicamente self-tests que no conecten ni escriban en SQL.
+7. Solicitar revisión independiente.
+8. No desplegar automáticamente al host.
+9. No ejecutar una BD automáticamente.
+
+## Modo 8: publicar SchemaSyncTool
+
+1. Requerir una solicitud explícita de despliegue.
+2. Revisar que build y tests estén correctos.
+3. Publicar para linux-x64 mediante el comando documentado.
+4. Revisar el contenido de salida.
+5. Copiar el conjunto aprobado al host mediante el procedimiento autorizado.
+6. No imprimir credenciales.
+7. Verificar la versión y self-tests seguros en el host.
+8. Ejecutar una BD piloto solamente si fue solicitada explícitamente.
+
+## Modo 9: Softland
+
+1. Recordar que SOFTLAND está en 172.16.2.26 y no en Azure SQL MI.
+2. No confundir SOFTLAND con SOFTLAND_BK.
+3. No agregarla a n8n o databases.json automáticamente.
+4. No repetir Schema Compare directo contra la BD si persiste el timeout conocido.
+5. Utilizar out/SOFTLAND.dacpac como Source y sqldb_SOFTLAND como Target.
+6. No versionar out ni el DACPAC.
+7. No habilitar automatización hasta validar import, compare, conectividad y usuario de solo lectura.
+
+## Modo 10: bundle core-workflow-global
+
+1. Leer bundles/core-workflow-global.json.
+2. Tratar global y workflow como una única operación ordenada.
+3. Ejecutar global antes de workflow.
+4. Preservar [$(sqldb_core_global)].
+5. Fallar si queda una referencia literal sin variable SQLCMD.
+6. Utilizar un solo commit, PR, lock y work-root.
+7. Ejecutar primero self-test-sqlcmd.
+
+## Modo 11: múltiples bases
+
+1. No inferir autorización batch a partir de una solicitud ambigua.
+2. Exigir lista exacta de bases y confirmación explícita.
+3. Presentar dry-run y orden de ejecución.
+4. Verificar que ScHmSyNcOrCh0001 sigue inactivo salvo decisión específica.
+5. No cambiar do_not_auto_run automáticamente.
+6. Detenerse ante el primer fallo salvo instrucción diferente aprobada.
+7. Consolidar resultados sin completar PR.
+
+## Formato de entrega
+
+Entregar siempre:
+
+- Modo aplicado.
+- Base o alcance resuelto.
+- Fuentes consultadas.
+- Acciones realizadas.
+- Validaciones ejecutadas.
+- Resultado JSON cuando exista.
+- Commits y PR creados por el tool.
+- buildOk.
+- Riesgos o datos faltantes.
+- Acciones externas no ejecutadas.
+- Confirmación de que no se escribió en SQL.
+
+
+======================================================================
+5. ARCHIVO: .claude/agents/schema-sync-reviewer.md
+======================================================================
+
+---
+name: schema-sync-reviewer
+description: Revisa de forma independiente cambios de Schema Sync, SSDT, catálogos y workflows, con énfasis en seguridad de solo lectura, mappings, Git y validaciones. Usar antes de aceptar cambios significativos o habilitar una BD.
+tools: Read, Grep, Glob
+memory: project
+---
+
+Eres un revisor especializado en Azure SQL, SSDT, DacFx, Azure DevOps y n8n.
+
+Trabaja solamente en modo lectura.
+
+Revisa:
+
+1. Que ninguna ruta pueda escribir en SQL.
+2. Que solo se utilice SqlPackage Extract y ApplicationIntent=ReadOnly.
+3. Que no existan Publish, Deploy o TargetConnectionString.
+4. Que database, repoName, projectName y workflow coincidan.
+5. Que se opere una sola BD salvo autorización explícita.
+6. Que el orquestador permanezca inactivo.
+7. Que Softland permanezca deshabilitada salvo decisión explícita.
+8. Que Git utilice main y PR main hacia release sin autocomplete.
+9. Que no existan secretos ni conexiones completas.
+10. Que las validaciones correspondan a los archivos modificados.
+11. Que los errores de build no se oculten aunque exista commit o PR.
+12. En repos nuevos, que el cascarón tenga GUID propio, estructura mínima,
+    build exitoso y exclusiones correctas antes de catálogo o n8n.
+
+Prioriza hallazgos que puedan causar escritura SQL, ejecutar múltiples bases, exponer secretos, sincronizar la BD equivocada o producir un resultado falso positivo.
+
+Devuelve:
+
+- Hallazgos ordenados por severidad.
+- Evidencia con archivo y sección.
+- Impacto.
+- Corrección recomendada.
+- Validaciones faltantes.
+
+No modifiques archivos, no ejecutes workflows y no publiques el tool.
+
+
+======================================================================
+6. ARCHIVO: .claude/agents/schema-sync-diagnoser.md
+======================================================================
+
+---
+name: schema-sync-diagnoser
+description: Analiza logs y resultados de Schema Sync, SqlPackage, DacFx, SSDT, Git, Azure DevOps y n8n. Usar cuando una corrida, build DACPAC, assert o notificación falle y se necesite identificar la primera causa real.
+tools: Read, Grep, Glob
+memory: project
+---
+
+Eres especialista en diagnóstico de Schema Sync BD hacia proyectos SSDT.
+
+Trabaja en modo lectura y no repitas automáticamente la corrida.
+
+Proceso:
+
+1. Leer el result JSON.
+2. Identificar la primera fase que falló.
+3. Separar causa primaria de mensajes secundarios.
+4. Clasificar el fallo:
+   - Conectividad o autenticación.
+   - Nombre incorrecto de BD.
+   - SqlPackage Extract.
+   - DacFx Compare o PublishChangesToProject.
+   - Sanitize u objetos huérfanos.
+   - RefreshAllModulesFromDb.
+   - Assert de tablas, PK o constraints.
+   - Git push.
+   - PR.
+   - Build DACPAC o TSqlModel.Validate.
+   - n8n o Power Automate.
+5. Comparar con CONTEXTO-COMPLETO.md.
+6. Revisar especialmente SQL71501, headers /*@p_param */, carpetas schema_/entity_, nombres BD/repos y timeouts.
+7. Determinar si la corrección pertenece al tool, SSDT, configuración, red o proceso DBA.
+8. Proponer el cambio mínimo verificable.
+
+Nunca propongas ejecutar Publish, Deploy, DDL o DML como solución del flujo automático.
+
+Devuelve:
+
+- Causa principal.
+- Evidencia.
+- Errores secundarios.
+- Componente responsable.
+- Corrección recomendada.
+- Prueba segura para verificarla.
+- Acciones que no deben ejecutarse.
+
+
+======================================================================
+7. ARCHIVO: docs/specs/schema-sync-onboarding-template.md
+======================================================================
+
+# Spec de incorporación a Schema Sync
+
+## Solicitud
+
+- Solicitante:
+- Fecha:
+- Motivo:
+- Historia de usuario o tarea:
+
+## Base de datos
+
+- Nombre real de la BD:
+- Servidor:
+- Tipo: Azure SQL MI / SQL Server on-prem / otro
+- Tamaño aproximado:
+- Cantidad aproximada de tablas:
+- Características especiales:
+- Existe una BD con nombre parecido:
+
+## Acceso
+
+- Usuario de solo lectura:
+- ApplicationIntent=ReadOnly verificado: sí/no
+- VIEW DEFINITION verificado: sí/no
+- SELECT requerido verificado: sí/no
+- Sin db_owner/db_datawriter/db_ddladmin: sí/no
+- Conectividad desde host 172.16.2.60: sí/no/no aplica
+
+No escribir passwords, PAT o connection strings completas en esta spec.
+
+## Azure DevOps y SSDT
+
+- Organización:
+- Proyecto:
+- Repo:
+- Repo URL:
+- Branch de sync: main
+- Branch PR: release
+- Nombre del proyecto SSDT:
+- Ruta del sqlproj:
+- Ruta de la solución:
+- build-dacpac.ps1 disponible: sí/no
+- Proyecto nuevo o existente:
+
+## Evaluación de cascarón SSDT
+
+- Estado inicial del repo: vacío / solo README / proyecto SSDT existente
+- Cascarón requerido: sí/no
+- Plantilla de referencia: core_arthur / Softland / otra
+- README existente preservado: sí/no/no aplica
+- ProjectGuid nuevo generado: sí/no/no aplica
+- DSP confirmado:
+- DefaultFileStructure=BySchemaAndSchemaType: sí/no/no aplica
+- Scripts de datos declarados como None: sí/no/no aplica
+- .gitignore excluye .vs, bin, obj, out y *.dacpac: sí/no
+- Build del cascarón con cero errores: sí/no/no aplica
+- Método de import: VS / Compare live / DACPAC + Compare
+- Import de esquema validado: sí/no/pendiente
+
+## Configuración propuesta
+
+- database:
+- repoName:
+- projectName:
+- sqlServer:
+- kind:
+- heavy:
+- bundle:
+- workflow ID propuesto:
+- workflow name propuesto:
+- schedule solicitado:
+- enabled inicial: false
+
+## Excepciones
+
+- Users/permisos a ignorar:
+- DatabaseOptions a ignorar:
+- SQLCMD variables:
+- Referencias entre proyectos:
+- Objetos WITH ENCRYPTION:
+- Problemas SQL71501 conocidos:
+- Timeouts o tamaño especial:
+
+## Plan de validación
+
+- [ ] Nombre real confirmado.
+- [ ] Listado de bases consultado.
+- [ ] Repo y sqlproj confirmados.
+- [ ] Necesidad de cascarón evaluada.
+- [ ] Cascarón compilado con cero errores, si aplica.
+- [ ] ProjectGuid nuevo verificado, si aplica.
+- [ ] Artefactos bin/obj/out/dacpac excluidos de Git.
+- [ ] Método de import seleccionado según tamaño y timeout.
+- [ ] Import de esquema validado antes de catálogo y n8n.
+- [ ] Build local ejecutado.
+- [ ] Configuración añadida con enabled=false.
+- [ ] Workflow validado sin importar.
+- [ ] Dry-run revisado.
+- [ ] Extract de solo lectura validado.
+- [ ] Compare validado.
+- [ ] Assert de tablas y PK validado.
+- [ ] Result JSON validado.
+- [ ] Push/PR revisado.
+- [ ] Teams revisado.
+- [ ] Schedule autorizado.
+
+## Aprobaciones requeridas
+
+- Habilitar enabled=true:
+- Importar workflow:
+- Ejecutar primera corrida:
+- Activar schedule:
+- Incluir en batch/orquestador:
+
+## Resultado
+
+- Estado:
+- Commit:
+- PR:
+- buildOk:
+- Result JSON:
+- Pendientes:
+
+
+======================================================================
+8. ARCHIVO: .claude/hooks/schema-sync-security-gate.ps1
+======================================================================
+
+$ErrorActionPreference = 'Stop'
+
+$rawInput = [Console]::In.ReadToEnd()
+if ([string]::IsNullOrWhiteSpace($rawInput)) {
+    exit 0
+}
+
+$hookInput = $rawInput | ConvertFrom-Json
+if ($hookInput.tool_name -ne 'Bash') {
+    exit 0
+}
+
+$command = [string]$hookInput.tool_input.command
+if ([string]::IsNullOrWhiteSpace($command)) {
+    exit 0
+}
+
+$normalized = $command.ToLowerInvariant()
+
+function Deny-Command {
+    param([string]$Reason)
+    [Console]::Error.WriteLine("Schema Sync bloqueó el comando: $Reason")
+    exit 2
+}
+
+if ($normalized -match 'sqlpackage[^\r\n]*(/action:publish|/action:deploy|/targetconnectionstring)') {
+    Deny-Command 'Publish, Deploy y TargetConnectionString están prohibidos.'
+}
+
+$sqlExecutor = $normalized -match '(sqlcmd|invoke-sqlcmd|ado\.net|system\.data\.sqlclient|microsoft\.data\.sqlclient)'
+$sqlMutation = $normalized -match '\b(insert|update|delete|merge|create|alter|drop|truncate|grant|revoke|deny)\b'
+
+if ($sqlExecutor -and $sqlMutation) {
+    Deny-Command 'Las operaciones DDL, DML y de seguridad contra SQL están prohibidas.'
+}
+
+if ($normalized -match 'schmsyncorch0001' -and $env:SCHEMA_SYNC_ALLOW_BATCH -ne '1') {
+    Deny-Command 'El orquestador multi-BD requiere SCHEMA_SYNC_ALLOW_BATCH=1 establecido manualmente para una ejecución aprobada.'
+}
+
+if ($normalized -match 'run-batch\.sh[^\r\n]*--execute' -and $env:SCHEMA_SYNC_ALLOW_BATCH -ne '1') {
+    Deny-Command 'La ejecución batch requiere SCHEMA_SYNC_ALLOW_BATCH=1 establecido manualmente para una ejecución aprobada.'
+}
+
+if ($normalized -match '(pscp|scp|rsync)[^\r\n]*/home/soporte/schema-sync/publish' -and $env:SCHEMA_SYNC_ALLOW_TOOL_DEPLOY -ne '1') {
+    Deny-Command 'El despliegue de SchemaSyncTool requiere SCHEMA_SYNC_ALLOW_TOOL_DEPLOY=1 establecido manualmente.'
+}
+
+exit 0
+
+
+======================================================================
+9. ARCHIVO: .claude/hooks/schema-sync-post-validate.ps1
+======================================================================
+
+$ErrorActionPreference = 'Stop'
+
+$rawInput = [Console]::In.ReadToEnd()
+if ([string]::IsNullOrWhiteSpace($rawInput)) {
+    exit 0
+}
+
+$hookInput = $rawInput | ConvertFrom-Json
+$filePath = [string]$hookInput.tool_input.file_path
+
+if ([string]::IsNullOrWhiteSpace($filePath)) {
+    $filePath = [string]$hookInput.tool_input.path
+}
+
+if ([string]::IsNullOrWhiteSpace($filePath) -or -not (Test-Path -LiteralPath $filePath)) {
+    exit 0
+}
+
+function Fail-Validation {
+    param([string]$Reason)
+    [Console]::Error.WriteLine("Validación Schema Sync falló: $Reason")
+    exit 2
+}
+
+$extension = [IO.Path]::GetExtension($filePath).ToLowerInvariant()
+$fileName = [IO.Path]::GetFileName($filePath)
+
+if ($extension -eq '.json') {
+    try {
+        $null = Get-Content -LiteralPath $filePath -Raw | ConvertFrom-Json
+    }
+    catch {
+        Fail-Validation "JSON inválido en $filePath. $($_.Exception.Message)"
+    }
+}
+
+if ($extension -eq '.ps1') {
+    $tokens = $null
+    $errors = $null
+    $null = [System.Management.Automation.Language.Parser]::ParseFile(
+        $filePath,
+        [ref]$tokens,
+        [ref]$errors
+    )
+
+    if ($errors.Count -gt 0) {
+        Fail-Validation "PowerShell inválido en $filePath. $($errors[0].Message)"
+    }
+}
+
+if ($extension -eq '.sh' -and (Get-Command bash -ErrorAction SilentlyContinue)) {
+    & bash -n $filePath
+    if ($LASTEXITCODE -ne 0) {
+        Fail-Validation "Shell inválido en $filePath."
+    }
+}
+
+if ($fileName -eq 'databases.json') {
+    $rawCatalog = Get-Content -LiteralPath $filePath -Raw
+
+    if ($rawCatalog -match '(?is)"database"\s*:\s*"SOFTLAND".{0,1000}"enabled"\s*:\s*true') {
+        Fail-Validation 'SOFTLAND no puede quedar enabled=true sin una decisión explícita y revisión manual.'
+    }
+}
+
+if ($fileName -match 'multi-bd|orchestrator|orquestador') {
+    $rawWorkflow = Get-Content -LiteralPath $filePath -Raw
+
+    if ($rawWorkflow -match '"do_not_auto_run"\s*:\s*false') {
+        Fail-Validation 'El orquestador debe conservar do_not_auto_run=true.'
+    }
+}
+
+exit 0
+
+
+======================================================================
+10. ARCHIVO: .claude/hooks/schema-sync-stop-validate.ps1
+======================================================================
+
+$ErrorActionPreference = 'Stop'
+
+$rawInput = [Console]::In.ReadToEnd()
+$hookInput = $null
+
+if (-not [string]::IsNullOrWhiteSpace($rawInput)) {
+    $hookInput = $rawInput | ConvertFrom-Json
+}
+
+if ($hookInput -and $hookInput.stop_hook_active -eq $true) {
+    exit 0
+}
+
+$projectRoot = $env:CLAUDE_PROJECT_DIR
+if ([string]::IsNullOrWhiteSpace($projectRoot)) {
+    exit 0
+}
+
+$schemaRoot = Join-Path $projectRoot 'automation\schema-sync'
+if (-not (Test-Path -LiteralPath $schemaRoot)) {
+    exit 0
+}
+
+function Fail-StopValidation {
+    param([string]$Reason)
+    [Console]::Error.WriteLine("La revisión final de Schema Sync falló: $Reason")
+    exit 2
+}
+
+$jsonFiles = Get-ChildItem -LiteralPath $schemaRoot -Filter '*.json' -File -ErrorAction SilentlyContinue
+foreach ($jsonFile in $jsonFiles) {
+    try {
+        $null = Get-Content -LiteralPath $jsonFile.FullName -Raw | ConvertFrom-Json
+    }
+    catch {
+        Fail-StopValidation "JSON inválido: $($jsonFile.FullName)."
+    }
+}
+
+$toolProject = Join-Path $schemaRoot 'SchemaSyncTool'
+if (Test-Path -LiteralPath $toolProject) {
+    $gitCommand = Get-Command git -ErrorAction SilentlyContinue
+    $dotnetCommand = Get-Command dotnet -ErrorAction SilentlyContinue
+
+    if ($gitCommand -and $dotnetCommand) {
+        $changedFiles = & git -C $projectRoot diff --name-only 2>$null
+        $toolChanged = $changedFiles | Where-Object { $_ -like 'automation/schema-sync/SchemaSyncTool/*' }
+
+        if ($toolChanged) {
+            & dotnet build $toolProject -c Release --no-restore
+            if ($LASTEXITCODE -ne 0) {
+                Fail-StopValidation 'dotnet build falló para SchemaSyncTool.'
+            }
+        }
+    }
+}
+
+exit 0
+
+
+======================================================================
+11. FRAGMENTO PARA .claude/settings.json
+======================================================================
+
+IMPORTANTE:
+
+Este fragmento debe fusionarse con settings.json. No reemplazar los hooks de auditoría y seguridad que ya existen.
+
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "& \"$env:CLAUDE_PROJECT_DIR\\.claude\\hooks\\schema-sync-security-gate.ps1\"",
+            "shell": "powershell",
+            "statusMessage": "Validando seguridad de Schema Sync"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "& \"$env:CLAUDE_PROJECT_DIR\\.claude\\hooks\\schema-sync-post-validate.ps1\"",
+            "shell": "powershell",
+            "statusMessage": "Validando archivo de Schema Sync"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "& \"$env:CLAUDE_PROJECT_DIR\\.claude\\hooks\\schema-sync-stop-validate.ps1\"",
+            "shell": "powershell",
+            "statusMessage": "Ejecutando revisión final de Schema Sync"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+Probar los hooks en una branch de prueba antes de habilitarlos para todo el equipo.
+
+Los flags SCHEMA_SYNC_ALLOW_BATCH y SCHEMA_SYNC_ALLOW_TOOL_DEPLOY deben establecerse manualmente únicamente para una operación aprobada. No guardarlos permanentemente en settings.json.
+
+
+======================================================================
+12. CAMBIO MÍNIMO EN CONTEXTO-COMPLETO.md
+======================================================================
+
+Conservar el documento actual. Añadir después del párrafo inicial:
+
+Nota de vigencia:
+
+Las cantidades de bases habilitadas, estados enabled y mappings de workflows documentados aquí representan una fotografía histórica. Para operar, consultar siempre databases.json y las definiciones n8n actuales. No utilizar este documento como sustituto del catálogo ejecutable.
+
+Opcionalmente, añadir bajo “Relacionado”:
+
+- Operación diaria: README.md.
+- Instrucciones para Claude Code: ../../../.claude/skills/manage-schema-sync-ssdt/SKILL.md.
+- Catálogo actual: databases.json.
+
+No mover la línea de tiempo ni los incidentes al SKILL.md. Son contexto histórico y deben cargarse solamente cuando resulten relevantes.
+
+
+======================================================================
+13. README FINAL
+======================================================================
+
+Utilizar el archivo entregado por separado:
+
+    README_SchemaSync_Actualizado.txt
+
+Para instalarlo en el repositorio:
+
+1. Revisar el contenido.
+2. Renombrarlo a README.md.
+3. Colocarlo en automation/schema-sync/README.md.
+4. Compararlo contra el README actual.
+5. Conservar cualquier instrucción local que siga vigente y no esté representada.
+
+
+======================================================================
+14. EJEMPLOS DE CONVERSACIÓN
+======================================================================
+
+Consultar sin ejecutar:
+
+    /manage-schema-sync-ssdt
+
+    Revisa el estado de buklo_lab. Lee databases.json y el último result JSON.
+    No ejecutes el workflow ni modifiques archivos.
+
+Ejecutar una sola BD:
+
+    /manage-schema-sync-ssdt
+
+    Ejecuta Schema Sync únicamente para buklo_lab con su workflow individual.
+    Antes confirma database, repo y workflow. Después revisa result JSON,
+    buildOk y PR. No completes el PR y no ejecutes ninguna otra BD.
+
+Diagnosticar SQL71501:
+
+    /manage-schema-sync-ssdt
+
+    Analiza el SQL71501 de sqldb_core_trace. Determina si la referencia
+    inválida ya existe en SQL o si fue introducida por el tool. No modifiques
+    la BD ni repitas la corrida.
+
+Preparar una incorporación:
+
+    /manage-schema-sync-ssdt
+
+    Prepara el onboarding de sqldb_da_global usando la spec. Primero revisa
+    si el repo necesita un cascarón SSDT. Si está vacío, prepara el cascarón
+    con GUID nuevo y valida su build antes de proponer databases.json o n8n.
+    Mantén enabled=false y no importes ni actives nada.
+
+Trabajar con Softland:
+
+    /manage-schema-sync-ssdt
+
+    Continúa la importación de SOFTLAND desde el DACPAC hacia el proyecto.
+    No uses Schema Compare directo contra la BD, no habilites n8n y no añadas
+    Softland a databases.json.
+
+Revisar un cambio del tool:
+
+    /manage-schema-sync-ssdt
+
+    Revisa el cambio en ModuleScriptFromDb.cs para los headers /*@p_param */.
+    Ejecuta build y pruebas locales, solicita revisión independiente y no
+    publiques el tool ni ejecutes una BD.
+
+
+======================================================================
+15. ORDEN DE IMPLEMENTACIÓN
+======================================================================
+
+1. Guardar una copia del README actual.
+2. Colocar el README actualizado y revisar el diff.
+3. Añadir la nota de vigencia a CONTEXTO-COMPLETO.md.
+4. Crear CLAUDE.md.
+5. Crear la skill manage-schema-sync-ssdt.
+6. Crear los dos agentes.
+7. Crear la spec de onboarding.
+8. Crear los scripts de hooks.
+9. Fusionar el fragmento con settings.json existente.
+10. Probar hooks con archivos temporales y comandos bloqueados seguros.
+11. Probar la skill en modo consulta.
+12. Probar diagnóstico con un result JSON histórico.
+13. Probar la creación de un cascarón en un repo temporal sin sobrescribir
+    README y sin dejar bin, obj, out o DACPAC en Git.
+14. Probar cambios locales sin ejecución externa.
+15. Ejecutar una BD piloto solamente después de revisar todos los controles.
+
+
+======================================================================
+16. PRUEBAS DE ACEPTACIÓN
+======================================================================
+
+- La skill responde estado sin ejecutar nada.
+- La skill utiliza databases.json y no una lista estática.
+- La skill diferencia database, repo y projectName.
+- Un comando SqlPackage Publish queda bloqueado.
+- Un comando DDL/DML mediante sqlcmd queda bloqueado.
+- Un batch sin flag autorizado queda bloqueado.
+- JSON inválido queda detectado.
+- PowerShell inválido queda detectado.
+- Shell inválido queda detectado cuando bash está disponible.
+- Un cambio de SchemaSyncTool ejecuta build final.
+- Un repo vacío se detecta como candidato a cascarón.
+- Un repo con .sqlproj existente no recibe otro cascarón.
+- Cada cascarón genera un ProjectGuid nuevo.
+- Un cascarón no habilita databases.json, workflow o schedule.
+- bin, obj, out y DACPAC permanecen fuera de Git.
+- Softland no puede quedar enabled accidentalmente.
+- El orquestador conserva do_not_auto_run=true.
+- Un diagnóstico no repite automáticamente el workflow.
+- Una ejecución de una BD entrega result JSON, buildOk y PR.
+- Ningún flujo completa PR automáticamente.
+- Ningún flujo escribe en SQL.
+
+
+======================================================================
+17. PLUGIN FUTURO
+======================================================================
+
+No crear el plugin hasta probar esta implementación en el repositorio.
+
+Nombre futuro sugerido:
+
+    gm-database-devops
+
+Contenido posible:
+
+gm-database-devops/
+|-- skills/
+|   |-- manage-schema-sync-ssdt/
+|   |-- review-ssdt-project/
+|   `-- diagnose-dacpac-build/
+|-- agents/
+|   |-- schema-sync-reviewer.md
+|   `-- schema-sync-diagnoser.md
+`-- hooks/
+
+El plugin debe contener procedimientos genéricos. No debe incluir:
+
+- IP internas.
+- Servidores productivos.
+- Usuarios.
+- Workflow IDs internos.
+- Catálogo de bases.
+- Rutas privadas.
+- Historial operativo privado.
+- Secretos.
+
+Los datos específicos deben permanecer en el repositorio privado y ser leídos por la skill al ejecutarse.

@@ -1,0 +1,16 @@
+{
+  "$schemaNote": "Catalogo de servidores Windows administrados por manage-windows-servers. Dominio separado de linux-servers (docs/servers/servers.json) - sin datos compartidos. Confirmar host/usuario/puerto/enabled aca antes de operar cualquier servidor. El campo purpose es descriptivo del estado actual, no una restriccion de alcance: el skill administra el servidor completo, no un unico aplicativo. Nunca guardar contrasenas ni ningun secreto en este archivo.",
+  "servers": [
+    {
+      "id": "172.16.2.127",
+      "host": "172.16.2.127",
+      "port": 5985,
+      "user": "administrator",
+      "authMethod": "NTLM sobre HTTP (TrustedHosts local en el cliente, sin dominio compartido)",
+      "enabled": true,
+      "hostnameReal": "SRV-PRTG",
+      "purpose": "Agente de Azure DevOps para builds Windows (hostname real SRV-PRTG sugiere posible instalacion previa o paralela de PRTG, sin confirmar todavia)",
+      "docFile": "docs/servers/windows/172.16.2.127.md"
+    }
+  ]
+}

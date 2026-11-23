@@ -1,0 +1,46 @@
+{
+  "do_not_auto_run": true,
+  "run_light": false,
+  "run_heavy": false,
+  "max_parallel_light": 1,
+  "max_parallel_heavy": 1,
+  "pr_reviewer_email": "${SCHEMA_SYNC_PR_REVIEWER_EMAIL}",
+  "teams_webhook_url": "${SCHEMA_SYNC_NOTIFY_WEBHOOK}",
+  "databases": [
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "EXAMPLE_DATABASE",
+      "projectName": "EXAMPLE_DATABASE",
+      "repoName": "project_EXAMPLE_DATABASE",
+      "repoUrl": "https://example.invalid/example-org/_git/project_EXAMPLE_DATABASE",
+      "sqlServer": "sql-server.example.invalid"
+    },
+    {
+      "kind": "solution-bundle",
+      "bundleId": "EXAMPLE_BUNDLE",
+      "enabled": false,
+      "heavy": false,
+      "database": "EXAMPLE_DB_A+EXAMPLE_DB_B",
+      "projectName": "EXAMPLE_BUNDLE",
+      "repoName": "project_EXAMPLE_BUNDLE",
+      "repoUrl": "https://example.invalid/example-org/_git/project_EXAMPLE_BUNDLE",
+      "sqlServer": "sql-server.example.invalid",
+      "projects": [
+        {
+          "database": "EXAMPLE_DB_A",
+          "projectName": "EXAMPLE_DB_A",
+          "order": 1
+        },
+        {
+          "database": "EXAMPLE_DB_B",
+          "projectName": "EXAMPLE_DB_B",
+          "order": 2,
+          "preserveSqlCmdRefs": [
+            "EXAMPLE_DB_A"
+          ]
+        }
+      ]
+    }
+  ]
+}

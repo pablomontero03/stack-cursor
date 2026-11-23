@@ -1,0 +1,56 @@
+{
+  "$schemaNote": "Catalogo de servidores Linux administrados por manage-linux-servers. Fuente de verdad: confirmar host/usuario/puerto/enabled aca antes de operar cualquier servidor, igual criterio que schema-sync/databases.json para bases de datos. El campo purpose es descriptivo del estado actual, no una restriccion de alcance: el skill administra el servidor completo, no un unico aplicativo. Nunca guardar contrasenas, claves privadas ni ningun secreto en este archivo.",
+  "servers": [
+    {
+      "id": "172.16.2.60",
+      "host": "172.16.2.60",
+      "sshAlias": "172.16.2.60",
+      "port": 22,
+      "user": "soporte",
+      "enabled": true,
+      "purpose": "n8n en Docker (hostname real SRV-SFTP-TEST)",
+      "docFile": "docs/servers/172.16.2.60.md"
+    },
+    {
+      "id": "172.16.2.43",
+      "host": "172.16.2.43",
+      "sshAlias": "172.16.2.43",
+      "port": 22,
+      "user": "administrator",
+      "enabled": true,
+      "purpose": "Cluster de desarrollo (hostname real srv-desarrollo-5)",
+      "docFile": "docs/servers/172.16.2.43.md"
+    },
+    {
+      "id": "10.1.0.200",
+      "host": "10.1.0.200",
+      "sshAlias": "10.1.0.200",
+      "port": 22,
+      "user": "adoadmin",
+      "enabled": true,
+      "purpose": "Agente de Azure DevOps (hostname real gmon-hub-linuxvm-eastus2-0001)",
+      "docFile": "docs/servers/10.1.0.200.md"
+    },
+    {
+      "id": "172.16.2.31",
+      "host": "172.16.2.31",
+      "sshAlias": "172.16.2.31",
+      "port": 22,
+      "user": "adm01",
+      "enabled": true,
+      "purpose": "Elastic (apagado) y Ollama corriendo (hostname real srvdesarrollo03)",
+      "docFile": "docs/servers/172.16.2.31.md"
+    },
+    {
+      "id": "openedx",
+      "host": "135.119.204.153",
+      "sshAlias": "openedx",
+      "port": 22,
+      "user": "adminedx",
+      "enabled": true,
+      "purpose": "Open edX (hostname real VM)",
+      "docFile": "docs/servers/openedx.md",
+      "note": "Clave privada vive en env/keyopenedx.pem dentro del repo (excepcion conocida y aceptada por el usuario 2026-09-08), no en %USERPROFILE%\\.ssh\\ como el resto"
+    }
+  ]
+}

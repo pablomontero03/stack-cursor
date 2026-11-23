@@ -1,0 +1,469 @@
+{
+  "do_not_auto_run": true,
+  "run_light": true,
+  "run_heavy": false,
+  "max_parallel_light": 3,
+  "max_parallel_heavy": 1,
+  "pr_reviewer_email": "pmontero@grupomontecristo.com",
+  "teams_webhook_url": "https://default33dd4184306847da891da70e02f8c0.c9.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/06/workflows/141f2fc4344d435b9d803862c03de7b4/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=RVdNuUEb8qi39rXfvIjbeYxM00tdm8SGhigOarWki0U",
+  "databases": [
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "OpsObservability",
+      "projectName": "OpsObservability",
+      "repoName": "project_OpsObservability",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_OpsObservability",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_app_datalab",
+      "projectName": "sqldb_app_datalab",
+      "repoName": "project_sqldb_app_datalab",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_app_datalab",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "buklo_lab",
+      "projectName": "sqldb_buklo_lab",
+      "repoName": "project_sqldb_buklo_lab",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_buklo_lab",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_core",
+      "projectName": "sqldb_core",
+      "repoName": "project_sqldb_core",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_core",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_core_arthur",
+      "projectName": "sqldb_core_arthur",
+      "repoName": "project_sqldb_core_arthur",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_core_arthur",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_core_config",
+      "projectName": "sqldb_core_config",
+      "repoName": "project_sqldb_core_config",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_core_config",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_core_demographic",
+      "projectName": "sqldb_core_demographic",
+      "repoName": "project_sqldb_core_demographic",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_core_demographic",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_core_file",
+      "projectName": "sqldb_core_file",
+      "repoName": "project_sqldb_core_file",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_core_file",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "kind": "solution-bundle",
+      "bundleId": "core-workflow-global",
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_core_global+sqldb_core_workflow",
+      "projectName": "core-workflow-global",
+      "repoName": "project-qldb_core_workflow-sqldb_core_global",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project-qldb_core_workflow-sqldb_core_global",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net",
+      "projects": [
+        {
+          "database": "sqldb_core_global",
+          "projectName": "sqldb_core_global",
+          "order": 1
+        },
+        {
+          "database": "sqldb_core_workflow",
+          "projectName": "sqldb_core_workflow",
+          "order": 2,
+          "preserveSqlCmdRefs": [
+            "sqldb_core_global"
+          ]
+        }
+      ]
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_core_historical",
+      "projectName": "sqldb_core_historical",
+      "repoName": "project_sqldb_core_historical",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_core_historical",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_core_job_schedule",
+      "projectName": "sqldb_core_job_schedule",
+      "repoName": "project_sqldb_core_job_schedule",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_core_job_schedule",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_core_log",
+      "projectName": "sqldb_core_log",
+      "repoName": "project_sqldb_core_log",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_core_log",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_core_module",
+      "projectName": "sqldb_core_module",
+      "repoName": "project_sqldb_core_module",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_core_module",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_core_schedule",
+      "projectName": "sqldb_core_schedule",
+      "repoName": "project_sqldb_core_schedule",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_core_schedule",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_core_trace",
+      "projectName": "sqldb_core_trace",
+      "repoName": "project_sqldb_core_trace",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_core_trace",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_da_core_cfg",
+      "projectName": "sqldb_da_core_cfg",
+      "repoName": "project_sqldb_da_core_cfg",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_da_core_cfg",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_da_core_log",
+      "projectName": "sqldb_da_core_log",
+      "repoName": "project_sqldb_da_core_log",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_da_core_log",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_da_core_sec",
+      "projectName": "sqldb_da_core_sec",
+      "repoName": "project_sqldb_da_core_sec",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_da_core_sec",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_da_core_tmp",
+      "projectName": "sqldb_da_core_tmp",
+      "repoName": "project_sqldb_da_core_tmp",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_da_core_tmp",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_da_global",
+      "projectName": "sqldb_da_global",
+      "repoName": "project_sqldb_da_global",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_da_global",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_database_maintenance",
+      "projectName": "sqldb_database_maintenance",
+      "repoName": "project_sqldb_database_maintenance",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_database_maintenance",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_gm_balance_score_card",
+      "projectName": "sqldb_gm_balance_score_card",
+      "repoName": "project_sqldb_gm_balance_score_card",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_gm_balance_score_card",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_gm_cotizadores",
+      "projectName": "sqldb_gm_cotizadores",
+      "repoName": "project_sqldb_gm_cotizadores",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_gm_cotizadores",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_gm_intranet",
+      "projectName": "sqldb_gm_intranet",
+      "repoName": "project_sqldb_gm_intranet",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_gm_intranet",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_gm_zenit",
+      "projectName": "sqldb_gm_zenit",
+      "repoName": "project_sqldb_gm_zenit",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_gm_zenit",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_int_medica",
+      "projectName": "sqldb_int_medica",
+      "repoName": "project_sqldb_int_medica",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_int_medica",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_int_nomedica",
+      "projectName": "sqldb_int_nomedica",
+      "repoName": "project_sqldb_int_nomedica",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_int_nomedica",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_medismart_agreement",
+      "projectName": "sqldb_medismart_agreement",
+      "repoName": "project_sqldb_medismart_agreement",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_medismart_agreement",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_pre_stage",
+      "projectName": "sqldb_pre_stage",
+      "repoName": "project_sqldb_pre_stage",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_pre_stage",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_scheduling_occupational_health",
+      "projectName": "sqldb_scheduling_occupational_health",
+      "repoName": "project_sqldb_scheduling_occupational_health",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_scheduling_occupational_health",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_sds_blue",
+      "projectName": "sqldb_sds_blue",
+      "repoName": "project_sqldb_sds_blue",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_sds_blue",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_sds_medica",
+      "projectName": "sqldb_sds_medica",
+      "repoName": "project_sqldb_sds_medica",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_sds_medica",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_sds_salesforce",
+      "projectName": "sqldb_sds_salesforce",
+      "repoName": "project_sqldb_sds_salesforce",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_sds_salesforce",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": true,
+      "heavy": false,
+      "database": "sqldb_stg_blue",
+      "projectName": "sqldb_stg_blue",
+      "repoName": "project_sqldb_stg_blue",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_stg_blue",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_stg_blueintelligence",
+      "projectName": "sqldb_stg_blueintelligence",
+      "repoName": "project_sqldb_stg_blueintelligence",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_stg_blueintelligence",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_stg_demographic",
+      "projectName": "sqldb_stg_demographic",
+      "repoName": "project_sqldb_stg_demographic",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_stg_demographic",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_stg_gala",
+      "projectName": "sqldb_stg_gala",
+      "repoName": "project_sqldb_stg_gala",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_stg_gala",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_stg_gm_drmax",
+      "projectName": "sqldb_stg_gm_drmax",
+      "repoName": "project_sqldb_stg_gm_drmax",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_stg_gm_drmax",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_stg_h1",
+      "projectName": "sqldb_stg_h1",
+      "repoName": "project_sqldb_stg_h1",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_stg_h1",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_stg_hana",
+      "projectName": "sqldb_stg_hana",
+      "repoName": "project_sqldb_stg_hana",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_stg_hana",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_stg_hana_nomed",
+      "projectName": "sqldb_stg_hana_nomed",
+      "repoName": "project_sqldb_stg_hana_nomed",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_stg_hana_nomed",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_stg_huli",
+      "projectName": "sqldb_stg_huli",
+      "repoName": "project_sqldb_stg_huli",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_stg_huli",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_stg_iolab",
+      "projectName": "sqldb_stg_iolab",
+      "repoName": "project_sqldb_stg_iolab",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_stg_iolab",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_stg_mlewis",
+      "projectName": "sqldb_stg_mlewis",
+      "repoName": "project_sqldb_stg_mlewis",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_stg_mlewis",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_stg_neotel",
+      "projectName": "sqldb_stg_neotel",
+      "repoName": "project_sqldb_stg_neotel",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_stg_neotel",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_stg_salesforce",
+      "projectName": "sqldb_stg_salesforce",
+      "repoName": "project_sqldb_stg_salesforce",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_stg_salesforce",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_stg_sislocar",
+      "projectName": "sqldb_stg_sislocar",
+      "repoName": "project_sqldb_stg_sislocar",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_stg_sislocar",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_stg_ulemus",
+      "projectName": "sqldb_stg_ulemus",
+      "repoName": "project_sqldb_stg_ulemus",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_stg_ulemus",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    },
+    {
+      "enabled": false,
+      "heavy": false,
+      "database": "sqldb_stg_vtiger",
+      "projectName": "sqldb_stg_vtiger",
+      "repoName": "project_sqldb_stg_vtiger",
+      "repoUrl": "https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project_sqldb_stg_vtiger",
+      "sqlServer": "gmon-prod-sqlmi-eastus2-0001.15c9ad07b4c3.database.windows.net"
+    }
+  ]
+}
