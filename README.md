@@ -6,13 +6,11 @@ Cursor no está instalado en este servidor. Esta carpeta es el proyecto: se abre
 
 ## Estado
 
-Fase 6 cerrada el 2026-11-23. `setup-kiro.sh` conserva el setup original. `setup-cursor.sh` es el de este servidor y ya se ejecutó. Falta la prueba abriendo la carpeta en Cursor por Remote SSH (fase 7).
+Fase 7 cerrada el 2026-11-23. La carpeta se abrió en Cursor por Remote SSH. Cargan las 10 rules, `aks-diagnoser` respondió y el hook bloqueó un `INSERT` y un `DROP` de prueba.
 
 Los secretos de trabajo están en `env/.env`, armado con los archivos del clon de Kiro. Ese archivo no se versiona.
 
-La fuente de verdad de lo que todavía no se porta sigue siendo `/home/cursor/automation-kiro`.
-
-La fuente de verdad del comportamiento sigue siendo `/home/cursor/automation-kiro`. No se reescribe: se porta.
+La fuente de verdad del comportamiento portado es esta carpeta, `/home/cursor/stack-cursor`. `automation-kiro` queda intacto como original.
 
 El avance y el propósito de cada skill, steering y subagente están en [docs/MIGRACION-CURSOR.md](docs/MIGRACION-CURSOR.md).
 

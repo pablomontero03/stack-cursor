@@ -83,11 +83,13 @@ El `setup.sh` de Kiro no se reescribió. Quedó copiado tal cual en `setup-kiro.
 
 ### Fase 7 — Prueba en Cursor
 
-- [ ] Abrir `/home/cursor/stack-cursor` por Remote SSH
-- [ ] Las rules cargan
-- [ ] Un subagente de solo lectura responde con su propósito original
-- [ ] El hook bloquea un intento de escritura SQL
-- [ ] A partir de aquí `automation-kiro` deja de ser la fuente de verdad
+Abierta el 2026-11-23 como `stack-cursor [SSH: 10.1.0.200]`.
+
+- [x] Abrir `/home/cursor/stack-cursor` por Remote SSH
+- [x] Las rules cargan. El agente listó las diez en el turno: `global.mdc`, `AGENTS.md`, `schema-sync.mdc`, `aks.mdc`, `azure.mdc`, `azure-devops.mdc`, `cloudflare.mdc`, `n8n.mdc`, `orchestration.mdc`, `servers.mdc`. La de SQL solo lectura está en `global.mdc`, `AGENTS.md` y `schema-sync.mdc`
+- [x] `aks-diagnoser` respondió: `aks-diagnoser. No aplica cambios.`
+- [x] El hook bloqueó `echo DROP TABLE dbo.T` y `echo INSERT INTO dbo.T VALUES (1)`. El gate `sql-readonly-gate` respondió «Bloqueado: escritura SQL. Las bases de datos son solo lectura.» y el comando no se ejecutó
+- [x] A partir de aquí `automation-kiro` deja de ser la fuente de verdad del comportamiento portado. Sigue intacto como original
 
 ## Fuera de git, conservado en el servidor
 
@@ -135,7 +137,13 @@ No se reescribieron procedimientos. La revisión de secretos en las skills encon
 
 `automation-kiro` no se modificó.
 
-## Mapa de porte (todavía no ejecutado)
+### 2026-11-23 — Fase 7
+
+La carpeta se abrió en Cursor por Remote SSH. Las diez rules cargaron en el turno. `aks-diagnoser` respondió con su nombre y que no aplica cambios. El hook bloqueó un `DROP TABLE` y un `INSERT INTO` de prueba antes de ejecutarlos.
+
+`automation-kiro` no se modificó. La fuente de verdad del comportamiento portado pasa a ser esta carpeta.
+
+## Mapa de porte
 
 | Kiro | Cursor en este repo |
 |---|---|
@@ -146,7 +154,7 @@ No se reescribieron procedimientos. La revisión de secretos en las skills encon
 | `.kiro/hooks/sql-readonly-gate.*` | `.cursor/hooks.json` + `.cursor/hooks/sql-readonly-gate.sh` |
 | `.kiro/settings/mcp.json` | `.cursor/mcp.json` |
 | `docs/`, `schema-sync/` | mismas rutas |
-| `setup.sh` | `setup.sh` adaptado a este servidor |
+| `setup.sh` | `setup-kiro.sh` intacto y `setup-cursor.sh` para este servidor |
 
 ## Steering — propósito
 
