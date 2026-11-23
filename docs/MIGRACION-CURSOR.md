@@ -143,6 +143,10 @@ La carpeta se abrió en Cursor por Remote SSH. Las diez rules cargaron en el tur
 
 `automation-kiro` no se modificó. La fuente de verdad del comportamiento portado pasa a ser esta carpeta.
 
+### 2026-11-23 — Sesiones de Kiro
+
+Los 239 chats de `backup-kiro-home/crew/sessions` quedaron en `.local/sesiones-kiro/`, agrupados con el nombre de carpeta de kirocrew. El índice es `.local/sesiones-kiro/INDICE.md`. No se versionan. La rule `.cursor/rules/sesiones-kiro.mdc` hace que el agente busque ahí cuando el trabajo coincida con una de esas carpetas. 64 chats no tenían carpeta y quedaron en `sin-carpeta`.
+
 ## Mapa de porte
 
 | Kiro | Cursor en este repo |

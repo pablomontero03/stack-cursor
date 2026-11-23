@@ -8,6 +8,8 @@ Cursor no está instalado en este servidor. Esta carpeta es el proyecto: se abre
 
 Fase 7 cerrada el 2026-11-23. La carpeta se abrió en Cursor por Remote SSH. Cargan las 10 rules, `aks-diagnoser` respondió y el hook bloqueó un `INSERT` y un `DROP` de prueba.
 
+Las sesiones de kirocrew quedaron en `.local/sesiones-kiro/` (239 chats, fuera de git). La rule `sesiones-kiro.mdc` indica al agente buscar ahí.
+
 Los secretos de trabajo están en `env/.env`, armado con los archivos del clon de Kiro. Ese archivo no se versiona.
 
 La fuente de verdad del comportamiento portado es esta carpeta, `/home/cursor/stack-cursor`. `automation-kiro` queda intacto como original.

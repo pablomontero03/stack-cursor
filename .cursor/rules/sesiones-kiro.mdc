@@ -1,0 +1,12 @@
+---
+description: "Sesiones de Kiro Crew archivadas en este servidor, para recuperar contexto de trabajos anteriores"
+alwaysApply: true
+---
+
+# Sesiones anteriores de Kiro
+
+Las conversaciones de kirocrew están en `.local/sesiones-kiro/`, agrupadas con el mismo nombre de carpeta que tenían en Kiro. El índice es `.local/sesiones-kiro/INDICE.md`.
+
+Cuando el trabajo coincida con una carpeta o un dominio de ese índice, buscar ahí antes de rehacer el contexto. Leer el índice y los hilos que correspondan. El texto de cada sesión se conserva tal cual.
+
+Esas sesiones no se versionan: pueden contener secretos. No copiar claves, tokens ni contraseñas de ahí a archivos del repo.
