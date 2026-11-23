@@ -26,3 +26,6 @@ audit.log
 
 .DS_Store
 Thumbs.db
+
+# Copias de trabajo traidas de automation-kiro. No versionar.
+code/
