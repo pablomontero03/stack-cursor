@@ -70,7 +70,7 @@ INPUT:
         ip: n/a
         proxied: false
         ttl: auto
-      cluster_candidate: k3s-dev
+      cluster_candidate: k3s-uat
       node_selector: inherit
 
     production:
