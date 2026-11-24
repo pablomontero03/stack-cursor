@@ -674,3 +674,31 @@ Source files=`Dockerfile` aunque el Dockerfile del repo no usa `#{...}#`.
 ### Prevención
 Leer `patterns.md` § Dr.Max-Project higiene antes de generar el siguiente
 pipeline Optica.
+
+---
+
+## Error — Namespace Dev con mayúsculas (`Desarrollo`) en k3s (2026-11-24)
+
+### Síntoma
+Release stage Desarrollo → `rejected`. Task `apply deployment` falla en el
+primer `kubectl create secret … -n Desarrollo` con:
+
+```text
+metadata.namespace: Invalid value: "Desarrollo": a lowercase RFC 1123 label...
+```
+
+Build e imagen ACR OK. Hermano Inventario.Jobs con `-n desarrollo` OK.
+
+### Causa
+El intake / INPUT trae `namespace: Desarrollo` (etiqueta de ambiente). El
+nombre real del namespace en k3s-dev es **`desarrollo`** (RFC 1123, solo
+minúsculas). El VG Dev se creó con el valor del intake.
+
+### Solución
+- VG Dev: `namespace=desarrollo` (update-variable-group + Apply).
+- INPUT / ciclo: documentar `desarrollo`, no `Desarrollo`.
+- Redeploy (nuevo Build/Release). No reutilizar la instancia rejected.
+
+### Prevención
+Antes de Apply VG Dev Optica/k3s: confirmar namespace en vivo o patrón hermano
+(`desarrollo` / `uat` / `application-services`). Nunca `Desarrollo` con mayúscula.

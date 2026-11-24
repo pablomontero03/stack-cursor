@@ -48,7 +48,7 @@ INPUT:
 
   environments:
     development:
-      namespace: Desarrollo
+      namespace: desarrollo   # RFC 1123 (minúsculas). Intake "Desarrollo" rompe kubectl create secret.
       dns:
         fqdn: no-aplica
         type: A
@@ -110,3 +110,16 @@ INPUT:
 | Health | `/health` | `Program.cs` MapHealthChecks |
 | DB | `ConnectionStrings:LaboratorioDB`, `HersamDB` | appsettings → hostAliases sí |
 | ACR SC intake | no usar `SC-ACR-AZURE-GMON-DEV` | patrón hermanos: ACR Hub-2 |
+
+## Resultado ciclo (2026-11-24, Aprobación 1 no-prod)
+
+| Recurso | Id |
+|---|---|
+| VG Dev / UAT / Prod | **561** / **559** / **560** |
+| Build / Release | **716** (rev 2, `rutabuildcontext`) / **445** |
+| PRs | 16482 → development, 16483 → uat (merged) |
+| Build+Dev | 28911 + Release **8995** Desarrollo → **OK** (tras fix ns) |
+| Build+UAT | 28912 + Release **8996** UAT → **OK** |
+| Fallo inicial | Release **8992** rejected: VG561 `namespace=Desarrollo` (RFC 1123) → corregido a `desarrollo` |
+
+**Prod** queda fuera (Aprobación 2). Secretos runtime DB/Jwt/Hersam siguen placeholder.
