@@ -749,8 +749,8 @@ Confirmado por el usuario sobre Builds **713** (auth-api), **714** (inventario-a
    `Remove-AdoBuildStepByDisplayName` (displayName `Replace tokens`, fase `Job_1`).
 
 2. **File Creator `deployment-*.yml` SIEMPRE incluyen HPA** (`autoscaling/v2`,
-   min=1 max=2, CPU 70% / mem 80%). Excepción: Azure Functions / jobs con
-   TimerTriggers → `maxReplicas: 1` (no duplicar timers).
+   **min=1 max=1 por ahora** — se subirá después; CPU 70% / mem 80%).
+   Jobs/Functions con TimerTriggers deben quedarse en `maxReplicas: 1`.
 
 3. **`hostAliases` MySQL (`10.2.2.4` → gmon-dev-mysql…)** solo si el Secret/
    ConfigMap lleva connection string / vars de BD. Apps sin BD: no poner
