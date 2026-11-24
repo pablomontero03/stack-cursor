@@ -381,3 +381,381 @@ ya tenga Producción viva y solo necesite sumar Desarrollo/UAT:
   explícito de esa app puntual. Ver
   memoria de sesión `ado-buklo-web-frontend-deploy-pattern` para el detalle
   completo del patrón de despliegue de buklo-web.
+
+## Regla: no ejecutar setup.sh de Kiro
+**Causa de crashes del gateway confirmada en producción (2026-09-21).**
+
+No ejecutar `setup-kiro.sh` ni `source ./setup.sh`. Las variables se cargan con `set -a; source env/.env; set +a`. `./setup-cursor.sh` no reinicia el worker.
+
+**Siempre usar `--no-restart` cuando se ejecuta desde una sesión activa de Crew:**
+```bash
+set -a; source env/.env; set +a
+```
+
+**Cuándo SÍ reiniciar (sin --no-restart):**
+- Primera instalación en una máquina nueva
+- Cuando el operador lo pide explícitamente
+- Cuando se agregan nuevos agentes o skills que requieren recarga
+
+**Cuándo NO reiniciar (usar --no-restart):**
+- Cualquier vez que el agente ejecuta setup.sh para cargar variables de entorno
+- Al inicio de scripts que solo necesitan `$REPO_ROOT`, `$AZURE_DEVOPS_PAT`, etc.
+
+## Patrón: actualizar `filecontent` de un File Creator en un Build Definition (2026-09-21)
+
+El PUT de Build Definitions por API falla con `"An item with the same key has
+already been added"` — bug interno del deserializador de ADO, no hay workaround
+por PATCH ni reducción de campos en el body del subprocess de Python.
+
+**Secuencia correcta** (3 pasos, todos en bash + scratch):
+
+```bash
+# 1. Descargar a scratch
+AUTH=$(echo -n ":$AZURE_DEVOPS_PAT" | base64 -w0)
+curl -s "https://dev.azure.com/Shared-Service-GM/DevOps/_apis/build/definitions/683?api-version=7.1" \
+  -H "Authorization: Basic $AUTH" > /tmp/bdef683.json
+
+# 2. Mutar en Python (escribir resultado a scratch)
+python3 -c "
+import json, sys
+def dedup(p):
+    s={}
+    for k,v in p: s[k]=v
+    return s
+with open('/tmp/bdef683.json') as f:
+    d=json.load(f,object_pairs_hook=dedup)
+# MUTAR AQUÍ: p.ej step['inputs']['filecontent'] = nuevo_contenido
+for f in ['_links','authoredBy','latestBuild','latestCompletedBuild','metrics','uri','url','quality','drafts','createdDate']:
+    d.pop(f,None)
+for sub in [d.get('repository',{}),d.get('queue',{})]:
+    sub.pop('_links',None)
+for t in d.get('triggers',[]): t.pop('_links',None)
+with open('/tmp/bdef683_put.json','w') as f:
+    json.dump(d,f)
+"
+
+# 3. PUT con -d "@$VAR" (NUNCA --data-binary @file ni body inline en subprocess)
+BODY_FILE="/tmp/bdef683_put.json"
+curl -s -X PUT \
+  "https://dev.azure.com/Shared-Service-GM/DevOps/_apis/build/definitions/683?api-version=7.1" \
+  -H "Authorization: Basic $AUTH" \
+  -H "Content-Type: application/json" \
+  -d "@$BODY_FILE"
+```
+
+**Campo correcto del File Creator**: `inputs.filecontent` (todo minúsculas).
+El MCP `pipelines_definition list` con `includeAllProperties=true` muestra el JSON
+limpio — úsalo para inspeccionar los indices de phase/step antes de mutar.
+
+Ver detalle completo en [[debugging]] § "2026-09-21 — PUT Build Definition falla".
+
+
+---
+
+## Estándar de Release DACPAC patrón nuevo (2026-09-23)
+
+Al **crear o modificar** un release `Deploy-Desarrollo-UAT-Produccion-Base_Datos_*`
+(1 release / 3 stages, modelo **403** `sqldb_buklo_lab`), los 3 stages deben quedar con:
+
+1. **Artifact filter por branch** en `environment.conditions`:
+   `{conditionType:"artifact", name:<artifactAlias>, value: json{sourceBranch}}`
+   → Desarrollo=`development`, UAT=`uat`, Producción=`release`. Cada branch dispara
+   solo su stage. (Antes varios releases quedaban con stages sin este filtro.)
+2. **Deploy latest and cancel the others**: `environment.executionPolicy.queueDepthCount=1`
+   + `concurrencyCount=1`. (`queueDepthCount=0` = "Deploy all in sequence" — NO usar.)
+3. **Requester puede aprobar**: `preDeployApprovals.approvalOptions.releaseCreatorCanBeApprover=true`.
+   Único stage con aprobación real = Producción → grupo `Release Executers`
+   (`397ddbfe-1d60-4533-a4c9-b099f80ac154`).
+
+**Aplicar por REST** (config en lote, idempotente): GET cada def por id a archivo,
+transformar con python3 escribiendo a `_new.json`, PUT **sin id en la URL** (va en el body)
+a `vsrm .../release/definitions?api-version=7.1` con `curl -d "@$BODY_FILE"` (var de entorno,
+NUNCA `--data-binary @`). Probar en 1 modelo primero (403), verificar readback, luego batch.
+
+**NO tocar** el patrón antiguo (`Base_Datos_Build_*_Desarrollo/UAT/PRODUCCION`,
+`*_UAT-Produccion`) — son releases separados por ambiente, no el modelo de 3 stages.
+
+El generador `New-AdoClassicDatabasePlan.ps1` ya emite `deployLatestAndCancel=true` y
+`releaseCreatorCanApprove=true` por stage, así que las BDs nuevas nacen con el estándar.
+
+⚠️ La auto-aprobación en Prod debilita la segregación de funciones (quien dispara a
+`release` aprueba su propio deploy al SQL MI de prod) — es decisión consciente de Pablo.
+
+## Patrón: Apply con parámetros específicos según tipo de plan (2026-11-24)
+
+   490|Al ejecutar `Apply-AdoClassicPlan.ps1`, los parámetros obligatorios dependen del
+contenido del plan:
+
+| Plan contiene | Parámetros obligatorios |
+|---|---|
+| Solo Variable Group | `-PlanPath`, `-InventoryPath` |
+| Variable Group + Build | ➕ `-DeploymentDevYamlPath`, `-DeploymentUatYamlPath`, `-DeploymentProdYamlPath` |
+| Release | ➕ `-ReleaseEnvironmentsPath`, `-ExistingBuildDefinitionId`, `-BuildDefinitionName` |
+
+   500|**Ejemplo Build** (falla si faltan los manifests):
+```powershell
+Apply-AdoClassicPlan.ps1 `
+  -PlanPath 'plan-desarrollo-con-build.json' `
+  -InventoryPath 'inventory.json' `
+  -DeploymentDevYamlPath '/ruta/deployment-dev.yml' `
+  -DeploymentUatYamlPath '/ruta/deployment-uat.yml' `
+  -DeploymentProdYamlPath '/ruta/deployment-prod.yml'
+```
+
+   510|**Ejemplo Release**:
+```powershell
+Apply-AdoClassicPlan.ps1 `
+  -PlanPath 'plan-release-only.json' `
+  -InventoryPath 'inventory.json' `
+  -ReleaseEnvironmentsPath 'release-environments.json' `
+  -ExistingBuildDefinitionId 713 `
+  -BuildDefinitionName 'Build-Optica-Ecosystem-auth-api'
+```
+
+**Causa del fallo**: El script necesita el contenido real de los manifests para
+   520|los File Creator tasks del Build, y los IDs reales del Build para el Release.
+No puede generarlos sin esos parámetros.
+
+**Prevención**: Recordar que Apply NO es genérico — necesita datos específicos
+según el tipo de operación que ejecuta.
+
+## Patrón: Release desde plan base limpio (2026-11-24)
+
+Al crear el Release, **NO reutilizar** un plan que ya contiene operaciones
+ejecutadas (ej. `create-variable-group`). Azure DevOps rechaza operaciones
+   530|duplicadas.
+
+**Flujo correcto**:
+1. Crear plan base limpio (sin operaciones previas):
+   ```bash
+   cat plan-produccion.json | jq 'del(.approvedOperations) | .approvedOperations = []' > plan-base-release.json
+   ```
+
+2. Generar solo la operación del Release sobre ese plan base:
+   ```powershell
+   New-AdoClassicCreatePlan.ps1 `
+   540|     -Kind 'Release' `
+     -InputPlanPath 'plan-base-release.json' `
+     -OutPlanPath 'plan-release-only.json' `
+     -OperationId 'release-def' `
+     -ReleaseEnvironmentsPath 'release-environments-auth-api.json' `
+     -ExistingBuildDefinitionId 713 `
+     -BuildDefinitionName 'Build-Optica-Ecosystem-auth-api'
+   ```
+
+3. Validar y aplicar el plan del Release
+
+   550|**Por qué falla**: Si el plan contiene `create-variable-group` ya ejecutado,
+Apply detecta que el VG existe y se detiene antes de llegar al Release.
+
+**Prevención**: Release SIEMPRE desde plan base sin operaciones previas.
+
+## Patrón: Approval de Producción con approver obligatorio (2026-11-24)
+
+Azure DevOps **requiere un approver específico** cuando `approvalRequired: true`.
+No acepta approvals sin approver definido (error VS402896).
+
+**Opciones válidas**:
+   560|
+**A) Con approver específico** (recomendado):
+```json
+{
+  "stage": "Produccion",
+  "approvalRequired": true,
+  "approverId": "d88a393b-01ed-6276-89a2-e67efeb88f92",
+  "releaseCreatorCanBeApprover": false
+}
+```
+
+**B) Sin approval inicialmente** (configurar después en UI):
+   570|```json
+{
+  "stage": "Produccion",
+  "approvalRequired": false
+}
+```
+Luego configurar en UI: Release → Stage Producción → Pre-deployment conditions → Add approver
+
+**Por qué falla**: Azure DevOps no permite crear un stage con approval habilitado
+pero sin approver asignado. Es una validación de seguridad.
+
+**Prevención**: Nunca usar `approvalRequired: true` sin `approverId`. Si no se
+   580|conoce el approver, crear sin approval y configurarlo después.
+
+## Patrón: Readback manual cuando journal marca "ambiguous" (2026-11-24)
+
+Cuando una operación falla después de enviar el HTTP request pero antes de
+confirmar el resultado, el journal la marca como `"state": "ambiguous"` por
+seguridad. Apply rechaza reintentos automáticos para evitar duplicados.
+
+**Flujo de recuperación**:
+
+1. **Verificar si el recurso existe** vía API:
+   590|   ```bash
+   # Para Release
+   curl -s -u ":${AZURE_DEVOPS_PAT}" \
+     "https://vsrm.dev.azure.com/Shared-Service-GM/DevOps/_apis/release/definitions?api-version=7.1" | \
+     jq '.value[] | select(.name == "Deploy-Desarrollo-UAT-Produccion-<APP>") | {id, name}'
+   
+   # Para Build
+   curl -s -u ":${AZURE_DEVOPS_PAT}" \
+     "https://dev.azure.com/Shared-Service-GM/DevOps/_apis/build/definitions?api-version=7.1" | \
+     jq '.value[] | select(.name == "Build-<APP>") | {id, name}'
+   600|   ```
+
+2. **Si devuelve vacío** (recurso NO existe):
+   - Seguro limpiar el journal: `rm .local/azure-devops/executions/<hash>.json`
+   - Corregir el problema original (ej. approver faltante)
+   - Reintentar Apply
+
+3. **Si devuelve objeto** (recurso SÍ existe):
+   - NO limpiar journal
+   - Actualizar journal manualmente con el ID real
+   610|   - Continuar con el siguiente paso del flujo
+
+**Por qué existe**: El estado "ambiguous" protege contra crear duplicados cuando
+una operación falla pero no sabemos si el recurso se creó parcialmente en Azure
+DevOps.
+
+**Prevención**: SIEMPRE hacer readback manual antes de limpiar un journal
+"ambiguous". Nunca asumir que el recurso no existe solo porque Apply falló.
+
+**Ubicación del journal**: `.local/azure-devops/executions/<planValidationHash>.json`
+
+## Patrón: Variables containerRegistry* en Pipeline (NO en Variable Groups) (2026-11-24)
+
+Las variables `containerRegistryPassword` y `containerRegistryUsername` van en
+**Pipeline variables del Release**, NO en los Variable Groups.
+
+**Arquitectura correcta**:
+- **Variable Groups** = configuración específica por ambiente (namespace, recursos, conexiones)
+- **Pipeline variables del Release** = credenciales compartidas entre todos los ambientes
+
+**Implementación correcta**:
+
+```bash
+# Agregar variables al Release (NO a Variable Groups)
+curl -s -u ":${AZURE_DEVOPS_PAT}" \
+  "https://vsrm.dev.azure.com/Shared-Service-GM/DevOps/_apis/release/definitions/${RELEASE_ID}?api-version=7.1" | \
+  jq '.variables.containerRegistryPassword = {"value": "REDACTED"} |
+      .variables.containerRegistryUsername = {"value": "gmonhubacreastus20001"}' | \
+  curl -s -X PUT -u ":${AZURE_DEVOPS_PAT}" \
+    -H "Content-Type: application/json" \
+    "https://vsrm.dev.azure.com/Shared-Service-GM/DevOps/_apis/release/definitions/${RELEASE_ID}?api-version=7.1" \
+    -d @-
+```
+
+**Por qué falla**: Si se ponen en Variable Groups, funcionaría técnicamente pero es
+arquitectónicamente incorrecto. Las credenciales ACR son compartidas entre todos
+los ambientes, no específicas de un ambiente.
+
+**Prevención**: Revisar un Release existente (#400) para ver dónde están estas
+variables antes de crear uno nuevo.
+
+## Patrón: servicesname SIEMPRE en lowercase (2026-11-24)
+
+Kubernetes requiere que todos los nombres de servicios sean en minúsculas.
+El valor de `servicesname` en Variable Groups debe seguir esta convención.
+
+**Formato correcto**:
+- ✅ `optica-ecosystem-auth-api` (lowercase, descriptivo)
+- ❌ `Optica-Ecosystem-auth-api` (mayúsculas iniciales)
+- ❌ `auth-api` (muy genérico, no identifica el sistema)
+
+**Implementación**:
+
+```bash
+# Actualizar servicesname en Variable Groups (IDs 550, 551, 552)
+for VG_ID in 550 551 552; do
+  curl -s -u ":${AZURE_DEVOPS_PAT}" \
+    "https://dev.azure.com/Shared-Service-GM/DevOps/_apis/distributedtask/variablegroups/${VG_ID}?api-version=7.1" | \
+    jq '.variables.servicesname.value = "optica-ecosystem-auth-api"' | \
+    curl -s -X PUT -u ":${AZURE_DEVOPS_PAT}" \
+      -H "Content-Type: application/json" \
+      "https://dev.azure.com/Shared-Service-GM/DevOps/_apis/distributedtask/variablegroups/${VG_ID}?api-version=7.1" \
+      -d @-
+done
+```
+
+**Por qué falla**: Kubernetes rechaza manifests con nombres de servicios que contienen
+mayúsculas. El deployment fallará con error de validación.
+
+**Prevención**: SIEMPRE usar lowercase para `servicesname`. Formato recomendado:
+`<sistema>-<app>` para identificar claramente a qué sistema pertenece el servicio.
+
+## Patrón: Variables ACR en TODOS los stages (Dev, UAT, Prod) (2026-11-24)
+
+Las variables `containerRegistryPassword` y `containerRegistryUsername` deben
+estar disponibles en **TODOS los stages**, no solo en Producción.
+
+**Dos opciones válidas**:
+
+**Opción A - Pipeline variables** (compartidas, más simple):
+```json
+{
+  "variables": {
+    "containerRegistryPassword": {"value": "REDACTED"},
+    "containerRegistryUsername": {"value": "gmonhubacreastus20001"}
+  }
+}
+```
+
+**Opción B - Stage-level variables** (explícito por stage, más robusto):
+```bash
+curl -s -u ":${AZURE_DEVOPS_PAT}" \
+  "https://vsrm.dev.azure.com/Shared-Service-GM/DevOps/_apis/release/definitions/${RELEASE_ID}?api-version=7.1" | \
+  jq '.environments[0].variables.containerRegistryPassword = {"value": "REDACTED"} |
+      .environments[0].variables.containerRegistryUsername = {"value": "gmonhubacreastus20001"} |
+      .environments[1].variables.containerRegistryPassword = {"value": "REDACTED"} |
+      .environments[1].variables.containerRegistryUsername = {"value": "gmonhubacreastus20001"} |
+      .environments[2].variables.containerRegistryPassword = {"value": "REDACTED"} |
+      .environments[2].variables.containerRegistryUsername = {"value": "gmonhubacreastus20001"}' | \
+  curl -s -X PUT -u ":${AZURE_DEVOPS_PAT}" \
+    -H "Content-Type: application/json" \
+    "https://vsrm.dev.azure.com/Shared-Service-GM/DevOps/_apis/release/definitions/${RELEASE_ID}?api-version=7.1" \
+    -d @-
+```
+
+**Mejor práctica**: Usar **AMBAS** (Pipeline + Stage-level) para máxima robustez.
+
+**Por qué falla**: Si las variables están scoped solo a Prod, Desarrollo y UAT
+no pueden autenticarse contra ACR. El deployment falla con "unable to pull image".
+
+**Verificación**:
+```bash
+curl -s -u ":${AZURE_DEVOPS_PAT}" \
+  "https://vsrm.dev.azure.com/Shared-Service-GM/DevOps/_apis/release/definitions/${RELEASE_ID}?api-version=7.1" | \
+  jq '{
+    pipelineVars: .variables | keys,
+    stages: [.environments[] | {name, varsKeys: .variables | keys}]
+  }'
+```
+
+**Prevención**: SIEMPRE verificar que las variables ACR estén en los 3 stages
+(Desarrollo env 733, UAT env 734, Producción env 735) después de crear el Release.
+
+
+## 2026-11-24 — Dr.Max-Project / Optica-Ecosystem: higiene de Build clásico
+
+Confirmado por el usuario sobre Builds **713** (auth-api), **714** (inventario-api),
+**715** (inventario-jobs):
+
+1. **NO agregar step `Replace tokens`** en pipelines de `Dr.Max-Project`.
+   Los Dockerfiles de Optica viven en el repo **sin** tokens `#{...}#`.
+   El generador solo lo añadía porque `generatedByFileCreator=false` (caso Buklo
+   con `#{appname}#`). Fix permanente: `New-AdoBuildDefinitionPayload` salta
+   Replace tokens cuando `repo.project=Dr.Max-Project` salvo
+   `dockerfile.requiresReplaceTokens=true`. Retroactivo: splice
+   `Remove-AdoBuildStepByDisplayName` (displayName `Replace tokens`, fase `Job_1`).
+
+2. **File Creator `deployment-*.yml` SIEMPRE incluyen HPA** (`autoscaling/v2`,
+   min=1 max=2, CPU 70% / mem 80%). Excepción: Azure Functions / jobs con
+   TimerTriggers → `maxReplicas: 1` (no duplicar timers).
+
+3. **`hostAliases` MySQL (`10.2.2.4` → gmon-dev-mysql…)** solo si el Secret/
+   ConfigMap lleva connection string / vars de BD. Apps sin BD: no poner
+   hostAliases.
+
+Checklist pre-Apply Optica: sin Replace tokens · HPA en los 3 File Creator ·
+hostAliases solo con DB · prod FC puede quedar `enabled=false` pero su content
+debe ir completo (HPA + hostAliases si aplica).

@@ -121,6 +121,8 @@ copiadas ciegamente de la memoria vieja:
 # nunca se duplica el literal sin comentario que explique por que deben
 # coincidir.
 $script:AdoFileCreatorTaskId = '1f81a8be-d8ce-497d-9791-190126f661e7'
+# Task "Azure CLI" (bash inlineScript) -- Key Vault sync Buklo, mismo id que KEYVAULT-MIGRATION-BUKLO.md.
+$script:AdoAzureCliTaskId = '46e4be58-730b-4389-8a2f-ea10b3e5e815'
 
 function ConvertTo-AdoNormalizedRawString {
     <#
@@ -334,6 +336,41 @@ function Set-AdoFileCreatorContent {
     return $Build
 }
 
+function Set-AdoAzureCliInlineScriptContent {
+    <#
+    Encuentra EXACTAMENTE un step "Azure CLI" (bash, inlineScript) por
+    displayName + task.id real y reemplaza inputs.inlineScript. Lanza si
+    encuentra 0 o mas de 1 -- nunca agrega un step nuevo en silencio.
+    #>
+    param(
+        [Parameter(Mandatory)] $Build,
+        [Parameter(Mandatory)] [string]$DisplayName,
+        [Parameter(Mandatory)] [string]$InlineScript,
+        [Nullable[bool]]$Enabled
+    )
+
+    $normalizedContent = ConvertTo-AdoNormalizedRawString -Value $InlineScript
+
+    $matches = @()
+    foreach ($phase in @($Build.process.phases)) {
+        foreach ($step in @($phase.steps)) {
+            if ([string]$step.displayName -eq $DisplayName -and $step.task -and [string]$step.task.id -eq $script:AdoAzureCliTaskId) {
+                $matches += $step
+            }
+        }
+    }
+    if ($matches.Count -eq 0) {
+        throw "Set-AdoAzureCliInlineScriptContent: no se encontro ningun step Azure CLI con displayName '$DisplayName' -- confirmar el nombre exacto contra un GET fresco."
+    }
+    if ($matches.Count -gt 1) {
+        throw "Set-AdoAzureCliInlineScriptContent: se encontraron $($matches.Count) steps Azure CLI con displayName '$DisplayName' -- ambiguo, resolver a mano."
+    }
+
+    $matches[0].inputs.inlineScript = $normalizedContent
+    if ($null -ne $Enabled) { $matches[0].enabled = [bool]$Enabled }
+    return $Build
+}
+
 function Add-AdoBuildPhase {
     <#
     Inserta una fase (clon, nunca la referencia original) al principio o
@@ -449,6 +486,42 @@ function Add-AdoBuildReplaceTokensStep {
     return Add-AdoBuildStepAfterDisplayName -Build $Build -PhaseRefName $PhaseRefName -AfterDisplayName $AfterDisplayName -Step $step
 }
 
+function Remove-AdoBuildStepByDisplayName {
+    <#
+    Elimina EXACTAMENTE un step de una fase Build por displayName.
+    Caso real 2026-11-24 (Dr.Max-Project / Optica-Ecosystem Builds
+    713/714/715): el generador agregaba 'Replace tokens' porque el
+    Dockerfile vive en el repo (generatedByFileCreator=false), pero los
+    Dockerfiles de Optica NO usan tokens '#{...}#' -- el step sobra y
+    confunde. Lanza si encuentra 0 o mas de 1 coincidencia.
+    #>
+    param(
+        [Parameter(Mandatory)] $Build,
+        [Parameter(Mandatory)] [string]$PhaseRefName,
+        [Parameter(Mandatory)] [string]$DisplayName
+    )
+    $phase = Find-AdoBuildPhaseByRefName -Build $Build -RefName $PhaseRefName
+    $steps = @($phase.steps)
+    $matchIndexes = @()
+    for ($i = 0; $i -lt $steps.Count; $i++) {
+        if ([string]$steps[$i].displayName -eq $DisplayName) {
+            $matchIndexes += $i
+        }
+    }
+    if ($matchIndexes.Count -eq 0) {
+        throw "Remove-AdoBuildStepByDisplayName: no se encontro ningun step con displayName '$DisplayName' en la fase '$PhaseRefName'."
+    }
+    if ($matchIndexes.Count -gt 1) {
+        throw "Remove-AdoBuildStepByDisplayName: se encontraron $($matchIndexes.Count) steps con displayName '$DisplayName' en la fase '$PhaseRefName' -- ambiguo, resolver a mano."
+    }
+    $newSteps = [System.Collections.Generic.List[object]]::new()
+    for ($i = 0; $i -lt $steps.Count; $i++) {
+        if ($i -ne $matchIndexes[0]) { $newSteps.Add($steps[$i]) }
+    }
+    $phase.steps = @($newSteps)
+    return $Build
+}
+
 function Set-AdoBuildTriggerMaxConcurrentBuilds {
     param([Parameter(Mandatory)] $Build, [Parameter(Mandatory)] [int]$MaxConcurrentBuildsPerBranch)
     $trigger = @($Build.triggers)[0]
@@ -507,6 +580,51 @@ function Add-AdoBuildVariables {
         $entry = [ordered]@{ value = $value }
         if ($isSecretFlag) { $entry['isSecret'] = $true }
         Set-AdoPSObjectProperty -Object $Build.variables -Name $name -Value ([PSCustomObject]$entry)
+    }
+    return $Build
+}
+
+function Set-AdoBuildTaskGroupStepInputs {
+    <#
+    Setea/sobreescribe inputs del step de task group (metaTask) del Build
+  por displayName exacto (ej. 'Task group: Build-MultiStage'). Cierra el
+  gap de plan.dependencies.buildTaskGroup.inputs en creacion (ver
+  -BuildTaskGroupInputs en New-AdoBuildDefinitionPayload) para updates
+  retroactivos sin tocar el task group compartido -- parametro por pipeline.
+    #>
+    param(
+        [Parameter(Mandatory)] $Build,
+        [Parameter(Mandatory)] [string]$DisplayName,
+        [Parameter(Mandatory)] $Inputs
+    )
+    $inputsTable = ConvertTo-AdoHashtableDeep -InputObject $Inputs
+    if (-not ($inputsTable -is [System.Collections.IDictionary])) {
+        throw "Set-AdoBuildTaskGroupStepInputs: -Inputs debe ser un objeto/hashtable de pares nombre->valor."
+    }
+    $matchCount = 0
+    foreach ($phase in @($Build.process.phases)) {
+        foreach ($step in @($phase.steps)) {
+            if ([string]$step.displayName -ne $DisplayName) { continue }
+            $matchCount++
+            if (-not $step.PSObject.Properties['inputs'] -or $null -eq $step.inputs) {
+                Set-AdoPSObjectProperty -Object $step -Name 'inputs' -Value ([ordered]@{})
+            }
+            foreach ($key in $inputsTable.Keys) {
+                $rawVal = $inputsTable[$key]
+                $strVal = $null
+                if ($null -eq $rawVal) { $strVal = '' }
+                elseif ($rawVal -is [string]) { $strVal = $rawVal }
+                elseif ($rawVal -is [System.Collections.IDictionary] -and $rawVal.Contains('value')) { $strVal = [string]$rawVal['value'] }
+                else { $strVal = [string]$rawVal }
+                Set-AdoPSObjectProperty -Object $step.inputs -Name ([string]$key) -Value $strVal
+            }
+        }
+    }
+    if ($matchCount -eq 0) {
+        throw "Set-AdoBuildTaskGroupStepInputs: no se encontro ningun step con displayName '$DisplayName'."
+    }
+    if ($matchCount -gt 1) {
+        throw "Set-AdoBuildTaskGroupStepInputs: hay $matchCount steps con displayName '$DisplayName' -- ambiguo."
     }
     return $Build
 }
@@ -620,6 +738,46 @@ function Set-AdoReleaseEnvironmentVariableGroups {
     return $Release
 }
 
+function Set-AdoReleaseEnvironmentDeployTaskGroup {
+    <#
+    Repunta el TASK GROUP DE DEPLOY de un environment YA EXISTENTE a otro
+    task group (ej. clonar el deploy TG de Deployment a StatefulSet y apuntar
+    el stage al clon). Cambia, en el unico workflowTask de tipo 'metaTask' del
+    stage, su 'taskId' al nuevo UUID y su 'name' a "Task group: <NewName>"
+    (forma confirmada contra releases reales: workflowTasks[].name debe ser
+    exactamente "Task group: <nombre>"). PRESERVA los inputs del task
+    (ambiente/image/tag/containerRegistry*/etc.) porque el clon mantiene el
+    mismo contrato de inputs -- solo cambia la identidad del task group.
+    Rechaza si el stage no tiene EXACTAMENTE un metaTask (ambiguo/ninguno).
+    #>
+    param(
+        [Parameter(Mandatory)] $Release,
+        [Parameter(Mandatory)] [string]$Stage,
+        [Parameter(Mandatory)] [string]$NewTaskGroupId,
+        [Parameter(Mandatory)] [string]$NewTaskGroupName
+    )
+    if ($NewTaskGroupId -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
+        throw "Set-AdoReleaseEnvironmentDeployTaskGroup: -NewTaskGroupId debe ser un UUID. Encontrado: '$NewTaskGroupId'."
+    }
+    $env = Find-AdoReleaseEnvironmentByStage -Release $Release -Stage $Stage
+    $metaTasks = [System.Collections.Generic.List[object]]::new()
+    foreach ($dp in @($env.deployPhases)) {
+        foreach ($w in @($dp.workflowTasks)) {
+            if ([string]$w.definitionType -eq 'metaTask') { $metaTasks.Add($w) }
+        }
+    }
+    if ($metaTasks.Count -eq 0) {
+        throw "Set-AdoReleaseEnvironmentDeployTaskGroup: el stage '$Stage' no tiene ningun task group de deploy (metaTask)."
+    }
+    if ($metaTasks.Count -gt 1) {
+        throw "Set-AdoReleaseEnvironmentDeployTaskGroup: el stage '$Stage' tiene $($metaTasks.Count) task groups (metaTask); esta funcion solo repunta cuando hay exactamente uno para no cambiar el equivocado."
+    }
+    $meta = $metaTasks[0]
+    $meta.taskId = $NewTaskGroupId
+    $meta.name = "Task group: $NewTaskGroupName"
+    return $Release
+}
+
 function Set-AdoReleaseEnvironmentVariables {
     <#
     Fija (crea o sobrescribe) 1+ variables a nivel de un environment YA
@@ -720,7 +878,15 @@ function Set-AdoReleaseProductionApprovalGate {
         [ValidateSet('PreDeploy', 'PostDeploy')] [string]$Kind = 'PreDeploy',
         [Parameter(Mandatory)] [bool]$IsAutomated,
         [string]$ApproverId,
-        [bool]$IsNotificationOn = $false
+        [bool]$IsNotificationOn = $false,
+        # Regla permanente de la org (Pablo 2026-10-05): el check UI 'The
+        # user requesting a release or deployment should not approve it'
+        # debe quedar DESMARCADO en Produccion, es decir
+        # approvalOptions.releaseCreatorCanBeApprover=TRUE, para que el
+        # solicitante pueda aprobar sus propios releases. Nullable a
+        # proposito: si se omite, NO se toca approvalOptions (retrocompat
+        # exacta con el comportamiento previo a este parametro).
+        [Nullable[bool]]$ReleaseCreatorCanBeApprover
     )
     if (-not $IsAutomated -and [string]::IsNullOrWhiteSpace($ApproverId)) {
         throw "Set-AdoReleaseProductionApprovalGate: -IsAutomated `$false requiere -ApproverId -- Azure DevOps rechaza un gate manual sin approver asignado."
@@ -740,6 +906,12 @@ function Set-AdoReleaseProductionApprovalGate {
     }
     else {
         Set-AdoPSObjectProperty -Object $approval -Name 'approver' -Value ([ordered]@{ id = $ApproverId })
+    }
+    if ($null -ne $ReleaseCreatorCanBeApprover) {
+        if (-not $env.$approvalsPropName.PSObject.Properties['approvalOptions'] -or $null -eq $env.$approvalsPropName.approvalOptions) {
+            Set-AdoPSObjectProperty -Object $env.$approvalsPropName -Name 'approvalOptions' -Value ([ordered]@{})
+        }
+        Set-AdoPSObjectProperty -Object $env.$approvalsPropName.approvalOptions -Name 'releaseCreatorCanBeApprover' -Value ([bool]$ReleaseCreatorCanBeApprover)
     }
     return $Release
 }
@@ -854,12 +1026,12 @@ function New-AdoClassicUpdateApprovedOperation {
 # nunca Get-Command con un nombre recibido de una especificacion
 # declarativa externa.
 $script:AdoUpdateSpliceAllowedFunctions = @(
-    'Set-AdoFileCreatorContent', 'Add-AdoBuildPhase', 'Add-AdoBuildStepToPhase',
-    'Add-AdoBuildStepAfterDisplayName', 'Add-AdoBuildReplaceTokensStep',
-    'Set-AdoBuildTriggerMaxConcurrentBuilds', 'Set-AdoBuildTriggerPathFilter', 'Add-AdoBuildVariables', 'Add-AdoBuildMergeBatchingSplice',
+    'Set-AdoFileCreatorContent', 'Set-AdoAzureCliInlineScriptContent', 'Add-AdoBuildPhase', 'Add-AdoBuildStepToPhase',
+    'Add-AdoBuildStepAfterDisplayName', 'Add-AdoBuildReplaceTokensStep', 'Remove-AdoBuildStepByDisplayName',
+    'Set-AdoBuildTriggerMaxConcurrentBuilds', 'Set-AdoBuildTriggerPathFilter', 'Add-AdoBuildVariables', 'Set-AdoBuildTaskGroupStepInputs', 'Add-AdoBuildMergeBatchingSplice',
     'Set-AdoReleaseEnvironmentVariableGroups', 'Add-AdoReleaseEnvironmentCdTrigger',
     'Set-AdoReleaseProductionApprovalGate', 'Add-AdoReleaseEnvironmentReportarResultadoHu',
-    'Set-AdoReleaseEnvironmentVariables'
+    'Set-AdoReleaseEnvironmentVariables', 'Set-AdoReleaseEnvironmentDeployTaskGroup'
 )
 
 function ConvertTo-AdoHashtableDeep {
@@ -910,6 +1082,10 @@ function Invoke-AdoUpdateSplice {
             if ($Kind -ne 'Build') { throw "Invoke-AdoUpdateSplice: 'Set-AdoFileCreatorContent' solo aplica a -Kind Build." }
             return Set-AdoFileCreatorContent @Params -Build $Target
         }
+        'Set-AdoAzureCliInlineScriptContent' {
+            if ($Kind -ne 'Build') { throw "Invoke-AdoUpdateSplice: 'Set-AdoAzureCliInlineScriptContent' solo aplica a -Kind Build." }
+            return Set-AdoAzureCliInlineScriptContent @Params -Build $Target
+        }
         'Add-AdoBuildPhase' {
             if ($Kind -ne 'Build') { throw "Invoke-AdoUpdateSplice: 'Add-AdoBuildPhase' solo aplica a -Kind Build." }
             return Add-AdoBuildPhase @Params -Build $Target
@@ -926,6 +1102,10 @@ function Invoke-AdoUpdateSplice {
             if ($Kind -ne 'Build') { throw "Invoke-AdoUpdateSplice: 'Add-AdoBuildReplaceTokensStep' solo aplica a -Kind Build." }
             return Add-AdoBuildReplaceTokensStep @Params -Build $Target
         }
+        'Remove-AdoBuildStepByDisplayName' {
+            if ($Kind -ne 'Build') { throw "Invoke-AdoUpdateSplice: 'Remove-AdoBuildStepByDisplayName' solo aplica a -Kind Build." }
+            return Remove-AdoBuildStepByDisplayName @Params -Build $Target
+        }
         'Set-AdoBuildTriggerMaxConcurrentBuilds' {
             if ($Kind -ne 'Build') { throw "Invoke-AdoUpdateSplice: 'Set-AdoBuildTriggerMaxConcurrentBuilds' solo aplica a -Kind Build." }
             return Set-AdoBuildTriggerMaxConcurrentBuilds @Params -Build $Target
@@ -937,6 +1117,10 @@ function Invoke-AdoUpdateSplice {
         'Add-AdoBuildVariables' {
             if ($Kind -ne 'Build') { throw "Invoke-AdoUpdateSplice: 'Add-AdoBuildVariables' solo aplica a -Kind Build." }
             return Add-AdoBuildVariables @Params -Build $Target
+        }
+        'Set-AdoBuildTaskGroupStepInputs' {
+            if ($Kind -ne 'Build') { throw "Invoke-AdoUpdateSplice: 'Set-AdoBuildTaskGroupStepInputs' solo aplica a -Kind Build." }
+            return Set-AdoBuildTaskGroupStepInputs @Params -Build $Target
         }
         'Add-AdoBuildMergeBatchingSplice' {
             if ($Kind -ne 'Build') { throw "Invoke-AdoUpdateSplice: 'Add-AdoBuildMergeBatchingSplice' solo aplica a -Kind Build." }
@@ -961,6 +1145,10 @@ function Invoke-AdoUpdateSplice {
         'Add-AdoReleaseEnvironmentReportarResultadoHu' {
             if ($Kind -ne 'Release') { throw "Invoke-AdoUpdateSplice: 'Add-AdoReleaseEnvironmentReportarResultadoHu' solo aplica a -Kind Release." }
             return Add-AdoReleaseEnvironmentReportarResultadoHu @Params -Release $Target
+        }
+        'Set-AdoReleaseEnvironmentDeployTaskGroup' {
+            if ($Kind -ne 'Release') { throw "Invoke-AdoUpdateSplice: 'Set-AdoReleaseEnvironmentDeployTaskGroup' solo aplica a -Kind Release." }
+            return Set-AdoReleaseEnvironmentDeployTaskGroup @Params -Release $Target
         }
         default {
             throw "Invoke-AdoUpdateSplice rechazado: la funcion '$FunctionName' no esta en el mapa cerrado de splices permitidos ($($script:AdoUpdateSpliceAllowedFunctions -join ', ')). Nunca se despacha una funcion arbitraria recibida por una especificacion declarativa externa."
@@ -1068,13 +1256,16 @@ function Invoke-AdoClassicUpdatePlanGeneration {
 
         $excludedKeys = @('function')
         $fileContentPathValue = $null
-        if ($functionName -eq 'Set-AdoFileCreatorContent') {
+        if ($functionName -in @('Set-AdoFileCreatorContent', 'Set-AdoAzureCliInlineScriptContent')) {
             $pathPropName = $null
             if ($entry.PSObject.Properties['fileContentPath']) { $pathPropName = 'fileContentPath' }
             elseif ($entry.PSObject.Properties['contentPath']) { $pathPropName = 'contentPath' }
+            if ($entry.PSObject.Properties['inlineScriptPath']) { $pathPropName = 'inlineScriptPath' }
+            $contentPropName = if ($functionName -eq 'Set-AdoFileCreatorContent') { 'FileContent' } else { 'InlineScript' }
+            $inlineOrFileProp = if ($functionName -eq 'Set-AdoFileCreatorContent') { 'fileContent' } else { 'inlineScript' }
             if ($pathPropName) {
-                if ($entry.PSObject.Properties['fileContent']) {
-                    throw "Invoke-AdoClassicUpdatePlanGeneration rechazado: una entrada de 'Set-AdoFileCreatorContent' no puede traer 'fileContent' y '$pathPropName' a la vez -- ambiguo."
+                if ($entry.PSObject.Properties[$inlineOrFileProp]) {
+                    throw "Invoke-AdoClassicUpdatePlanGeneration rechazado: una entrada de '$functionName' no puede traer '$inlineOrFileProp' y '$pathPropName' a la vez -- ambiguo."
                 }
                 $fileContentPathValue = [string]$entry.$pathPropName
                 $excludedKeys += $pathPropName
@@ -1092,9 +1283,9 @@ function Invoke-AdoClassicUpdatePlanGeneration {
 
         if ($fileContentPathValue) {
             if (-not (Test-Path -LiteralPath $fileContentPathValue)) {
-                throw "Invoke-AdoClassicUpdatePlanGeneration rechazado: el archivo de contenido '$fileContentPathValue' (Set-AdoFileCreatorContent) no existe."
+                throw "Invoke-AdoClassicUpdatePlanGeneration rechazado: el archivo de contenido '$fileContentPathValue' ($functionName) no existe."
             }
-            $paramsHashtable['FileContent'] = (Get-Content -LiteralPath $fileContentPathValue -Raw -Encoding UTF8)
+            $paramsHashtable[$contentPropName] = (Get-Content -LiteralPath $fileContentPathValue -Raw -Encoding UTF8)
         }
 
         Write-Host "Aplicando splice: $functionName ..." -ForegroundColor Cyan
@@ -1280,5 +1471,433 @@ function Invoke-AdoClassicUpdatePlanGeneration {
         PlanPath             = $OutPlanPath
         AppliedFunctionNames = @($appliedFunctionNames)
         ApprovedOperation    = $updateResult.approvedOperation
+    }
+}
+
+
+# =============================================================================
+# tg-update (agregado 2026-10-29): generador de plan family='tg-update' para
+# EXPONER/mapear inputs en un task group EXISTENTE. Cierra el gap: la infra
+# tg-update ya existia en Test-AdoClassicPlan.ps1 (validacion) y
+# Apply-AdoClassicPlan.ps1 (Fase 1c, -CurrentTaskGroupJson) desde 2026-10-16,
+# pero NINGUN script versionado GENERABA el plan (embeber body + bodyHash
+# canonico). Este es ese generador, UNA vez, versionado y probado.
+#
+# A diferencia de Invoke-AdoClassicUpdatePlanGeneration (Build/Release), este
+# NO hace GET de red: el body actual del task group se provee desde disco
+# (-CurrentTaskGroupJsonPath, el mismo JSON que -CurrentTaskGroupJson que
+# Apply vuelve a exigir en tiempo de aplicacion). Asi es probable sin red y
+# sin PAT, igual que el resto de la suite.
+#
+# Las mutaciones se describen declarativamente y se despachan SIEMPRE contra
+# un switch literal cerrado (Invoke-AdoTaskGroupMutation) -- nunca
+# Invoke-Expression, nunca '&' dinamico. Un nombre de mutacion que no este en
+# el switch se rechaza sin ejecutar nada (mismo principio que
+# Invoke-AdoUpdateSplice).
+# =============================================================================
+
+function Invoke-AdoTaskGroupMutation {
+    <#
+    Aplica UNA mutacion al objeto body del task group (ya convertido a
+    hashtable profunda). Devuelve el body mutado. Switch literal cerrado:
+    - ExposeInput: agrega un input expuesto al arreglo inputs[] del task
+      group, con la MISMA forma que los demas inputs. Params: Name
+      (obligatorio), Label (default = Name), DefaultValue (default ''),
+      Required (default $false), Type (default 'string'), HelpMarkDown
+      (default ''). Rechaza si ya existe un input con ese Name.
+    - MapTaskInput: setea inputs.<InputName> = <InputValue> en la tarea
+      interna identificada por TaskId (UUID de task.id) o DisplayName.
+      Rechaza si no encuentra exactamente una tarea objetivo.
+    - ReplaceInTaskCommands: reemplaza una subcadena EXACTA (Find->Replace)
+      en el campo commands/script/inline de UNA tarea interna (TaskId o
+      DisplayName). Rechaza si 'Find' no aparece exactamente una vez. Uso:
+      clonar un deploy TG de Deployment a StatefulSet (rollout restart
+      deployment/ -> rollout status statefulset/).
+    #>
+    param(
+        [Parameter(Mandatory)] [hashtable]$Body,
+        [Parameter(Mandatory)] [string]$Mutation,
+        [Parameter(Mandatory)] [hashtable]$Params
+    )
+
+    switch ($Mutation) {
+        'ExposeInput' {
+            if (-not $Params.Contains('Name') -or [string]::IsNullOrWhiteSpace([string]$Params['Name'])) {
+                throw "Invoke-AdoTaskGroupMutation ExposeInput rechazado: falta 'Name'."
+            }
+            $name = [string]$Params['Name']
+            if (-not $Body.Contains('inputs') -or $null -eq $Body['inputs']) {
+                throw "Invoke-AdoTaskGroupMutation ExposeInput rechazado: el body no tiene arreglo 'inputs'."
+            }
+            $existing = @($Body['inputs'] | Where-Object { [string]$_.name -eq $name })
+            if ($existing.Count -gt 0) {
+                throw "Invoke-AdoTaskGroupMutation ExposeInput rechazado: el task group ya expone un input llamado '$name'."
+            }
+            $newInput = [ordered]@{
+                aliases      = @()
+                options      = [ordered]@{}
+                properties   = [ordered]@{}
+                name         = $name
+                label        = $(if ($Params.Contains('Label') -and -not [string]::IsNullOrWhiteSpace([string]$Params['Label'])) { [string]$Params['Label'] } else { $name })
+                defaultValue = $(if ($Params.Contains('DefaultValue')) { [string]$Params['DefaultValue'] } else { '' })
+                required     = $(if ($Params.Contains('Required')) { [bool]$Params['Required'] } else { $false })
+                type         = $(if ($Params.Contains('Type') -and -not [string]::IsNullOrWhiteSpace([string]$Params['Type'])) { [string]$Params['Type'] } else { 'string' })
+                helpMarkDown = $(if ($Params.Contains('HelpMarkDown')) { [string]$Params['HelpMarkDown'] } else { '' })
+                groupName    = ''
+            }
+            $Body['inputs'] = @($Body['inputs'] + $newInput)
+            return $Body
+        }
+        'MapTaskInput' {
+            if (-not $Params.Contains('InputName') -or [string]::IsNullOrWhiteSpace([string]$Params['InputName'])) {
+                throw "Invoke-AdoTaskGroupMutation MapTaskInput rechazado: falta 'InputName'."
+            }
+            if (-not $Params.Contains('InputValue')) {
+                throw "Invoke-AdoTaskGroupMutation MapTaskInput rechazado: falta 'InputValue'."
+            }
+            $hasTaskId = $Params.Contains('TaskId') -and -not [string]::IsNullOrWhiteSpace([string]$Params['TaskId'])
+            $hasDisplay = $Params.Contains('DisplayName') -and -not [string]::IsNullOrWhiteSpace([string]$Params['DisplayName'])
+            if (-not $hasTaskId -and -not $hasDisplay) {
+                throw "Invoke-AdoTaskGroupMutation MapTaskInput rechazado: hace falta 'TaskId' (UUID de task.id) o 'DisplayName' para identificar la tarea interna."
+            }
+            if (-not $Body.Contains('tasks') -or $null -eq $Body['tasks']) {
+                throw "Invoke-AdoTaskGroupMutation MapTaskInput rechazado: el body no tiene arreglo 'tasks'."
+            }
+            $targets = @($Body['tasks'] | Where-Object {
+                ($hasTaskId -and $null -ne $_.task -and [string]$_.task.id -eq [string]$Params['TaskId']) -or
+                ($hasDisplay -and [string]$_.displayName -eq [string]$Params['DisplayName'])
+            })
+            if ($targets.Count -eq 0) {
+                throw "Invoke-AdoTaskGroupMutation MapTaskInput rechazado: ninguna tarea interna coincide con el objetivo."
+            }
+            if ($targets.Count -gt 1) {
+                throw "Invoke-AdoTaskGroupMutation MapTaskInput rechazado: $($targets.Count) tareas internas coinciden con el objetivo; debe ser exactamente una (usar TaskId)."
+            }
+            $target = $targets[0]
+            if (-not $target.Contains('inputs') -or $null -eq $target['inputs']) {
+                $target['inputs'] = [ordered]@{}
+            }
+            $target['inputs'][[string]$Params['InputName']] = [string]$Params['InputValue']
+            return $Body
+        }
+        'ReplaceInTaskCommands' {
+            # Reemplaza una subcadena EXACTA en el campo de comandos/script de UNA
+            # tarea interna (identificada por TaskId o DisplayName). Params: Find
+            # (obligatorio), Replace (obligatorio, puede ser ''), TaskId|DisplayName.
+            # Rechaza si no hay exactamente una tarea objetivo, si la tarea no tiene
+            # un campo de script reconocible, o si 'Find' no aparece EXACTAMENTE una
+            # vez (nunca reemplaza a ciegas ni multiples ocurrencias no previstas).
+            if (-not $Params.Contains('Find') -or [string]::IsNullOrEmpty([string]$Params['Find'])) {
+                throw "Invoke-AdoTaskGroupMutation ReplaceInTaskCommands rechazado: falta 'Find' (subcadena a reemplazar)."
+            }
+            if (-not $Params.Contains('Replace')) {
+                throw "Invoke-AdoTaskGroupMutation ReplaceInTaskCommands rechazado: falta 'Replace' (puede ser cadena vacia, pero debe estar presente)."
+            }
+            $find = [string]$Params['Find']
+            $replace = [string]$Params['Replace']
+            $hasTaskId = $Params.Contains('TaskId') -and -not [string]::IsNullOrWhiteSpace([string]$Params['TaskId'])
+            $hasDisplay = $Params.Contains('DisplayName') -and -not [string]::IsNullOrWhiteSpace([string]$Params['DisplayName'])
+            if (-not $hasTaskId -and -not $hasDisplay) {
+                throw "Invoke-AdoTaskGroupMutation ReplaceInTaskCommands rechazado: hace falta 'TaskId' o 'DisplayName' para identificar la tarea."
+            }
+            if (-not $Body.Contains('tasks') -or $null -eq $Body['tasks']) {
+                throw "Invoke-AdoTaskGroupMutation ReplaceInTaskCommands rechazado: el body no tiene arreglo 'tasks'."
+            }
+            $targets = @($Body['tasks'] | Where-Object {
+                ($hasTaskId -and $null -ne $_.task -and [string]$_.task.id -eq [string]$Params['TaskId']) -or
+                ($hasDisplay -and [string]$_.displayName -eq [string]$Params['DisplayName'])
+            })
+            if ($targets.Count -eq 0) {
+                throw "Invoke-AdoTaskGroupMutation ReplaceInTaskCommands rechazado: ninguna tarea interna coincide con el objetivo."
+            }
+            if ($targets.Count -gt 1) {
+                throw "Invoke-AdoTaskGroupMutation ReplaceInTaskCommands rechazado: $($targets.Count) tareas coinciden; debe ser exactamente una (usar TaskId)."
+            }
+            $target = $targets[0]
+            if (-not $target.Contains('inputs') -or $null -eq $target['inputs']) {
+                throw "Invoke-AdoTaskGroupMutation ReplaceInTaskCommands rechazado: la tarea objetivo no tiene 'inputs'."
+            }
+            # Campo de script: 'commands' (SSH 'commands' runOption) o 'script' (Bash).
+            $scriptField = $null
+            foreach ($cand in @('commands', 'script', 'inline')) {
+                if ($target['inputs'].Contains($cand) -and -not [string]::IsNullOrEmpty([string]$target['inputs'][$cand])) { $scriptField = $cand; break }
+            }
+            if ($null -eq $scriptField) {
+                throw "Invoke-AdoTaskGroupMutation ReplaceInTaskCommands rechazado: la tarea objetivo no tiene un campo de script reconocible (commands/script/inline)."
+            }
+            $current = [string]$target['inputs'][$scriptField]
+            $occurrences = ([regex]::Matches($current, [regex]::Escape($find))).Count
+            if ($occurrences -ne 1) {
+                throw "Invoke-AdoTaskGroupMutation ReplaceInTaskCommands rechazado: 'Find' aparece $occurrences veces en el campo '$scriptField' (debe ser EXACTAMENTE 1 para un reemplazo seguro)."
+            }
+            $target['inputs'][$scriptField] = $current.Replace($find, $replace)
+            return $Body
+        }
+        default {
+            throw "Invoke-AdoTaskGroupMutation rechazado: mutacion desconocida '$Mutation'. Permitidas: ExposeInput, MapTaskInput, ReplaceInTaskCommands."
+        }
+    }
+}
+
+function Invoke-AdoTaskGroupUpdatePlanGeneration {
+    <#
+    Genera un plan family='tg-update' que EMBEBE el body completo del task
+    group (rev N, el que ADO incrementa en el PUT) con las mutaciones
+    aplicadas, y una entrada approvedOperations 'update-taskgroup' cuyo
+    bodyHash lo calcula New-AdoApprovedOperationEntry (NUNCA a mano) sobre el
+    body RELEIDO de disco -- exactamente la misma lectura que
+    Apply-AdoClassicPlan.ps1 hara al aplicar (misma leccion que el bug
+    2026-09-02: escribir -> releer UTF8 -> hashear).
+
+    No hace NINGUNA escritura en Azure DevOps ni llamada de red: el estado
+    actual del task group se provee por -CurrentTaskGroupJsonPath (un GET de
+    solo lectura que el operador trae por fuera, el mismo JSON que luego pasa
+    como -CurrentTaskGroupJson a Apply).
+
+    -MutationSpecPath: JSON array de entradas { mutation: 'ExposeInput'|'MapTaskInput', ... }.
+    Las claves (fuera de 'mutation') se pasan por splatting a
+    Invoke-AdoTaskGroupMutation via -Params.
+    #>
+    param(
+        [Parameter(Mandatory)] [string]$TaskGroupId,
+        [Parameter(Mandatory)] [string]$CurrentTaskGroupJsonPath,
+        [Parameter(Mandatory)] [string]$MutationSpecPath,
+        [Parameter(Mandatory)] [string]$OperationId,
+        [Parameter(Mandatory)] [string]$OutBodyPath,
+        [Parameter(Mandatory)] [string]$OutPlanPath,
+        [string]$Project = 'DevOps',
+        [string]$Organization = 'Shared-Service-GM'
+    )
+
+    if ($Organization -ne 'Shared-Service-GM') {
+        throw "Invoke-AdoTaskGroupUpdatePlanGeneration rechazado: esta skill solo opera sobre la organizacion 'Shared-Service-GM'."
+    }
+    if ($TaskGroupId -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
+        throw "Invoke-AdoTaskGroupUpdatePlanGeneration rechazado: -TaskGroupId debe ser un UUID. Encontrado: '$TaskGroupId'."
+    }
+    if (-not (Test-Path -LiteralPath $CurrentTaskGroupJsonPath)) {
+        throw "Invoke-AdoTaskGroupUpdatePlanGeneration rechazado: no existe -CurrentTaskGroupJsonPath '$CurrentTaskGroupJsonPath'."
+    }
+    if (-not (Test-Path -LiteralPath $MutationSpecPath)) {
+        throw "Invoke-AdoTaskGroupUpdatePlanGeneration rechazado: no existe -MutationSpecPath '$MutationSpecPath'."
+    }
+    if ([IO.Path]::GetFullPath($OutBodyPath) -eq [IO.Path]::GetFullPath($OutPlanPath)) {
+        throw "Invoke-AdoTaskGroupUpdatePlanGeneration rechazado: OutBodyPath y OutPlanPath deben ser distintos."
+    }
+
+    # ---- 1) Body actual del task group desde disco (solo lectura). El GET
+    #      de ADO devuelve { count, value: [ {tg} ] } o el {tg} directo:
+    #      aceptar ambas formas. ----
+    $rawParsed = Get-Content -LiteralPath $CurrentTaskGroupJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $rawTg = if ($rawParsed.PSObject.Properties['value'] -and $null -ne $rawParsed.value) { @($rawParsed.value)[0] } else { $rawParsed }
+    if ($null -eq $rawTg -or -not $rawTg.PSObject.Properties['id']) {
+        throw "Invoke-AdoTaskGroupUpdatePlanGeneration rechazado: -CurrentTaskGroupJsonPath no contiene un task group valido (sin 'id')."
+    }
+    if ([string]$rawTg.id -ne [string]$TaskGroupId) {
+        throw "Invoke-AdoTaskGroupUpdatePlanGeneration rechazado: el task group del archivo (id=$($rawTg.id)) no coincide con -TaskGroupId ($TaskGroupId)."
+    }
+
+    # Convertir a hashtable profunda para mutar de forma estable (mismo
+    # helper que usa la rama de splices de Build/Release).
+    $body = ConvertTo-AdoHashtableDeep -InputObject $rawTg
+
+    # ---- 2) Mutaciones declarativas, en orden, via el switch cerrado. ----
+    $mutParsed = Get-Content -LiteralPath $MutationSpecPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $mutEntries = @()
+    if ($null -ne $mutParsed) { $mutEntries = @($mutParsed) }
+    if ($mutEntries.Count -eq 0) {
+        throw "Invoke-AdoTaskGroupUpdatePlanGeneration rechazado: -MutationSpecPath no trae ninguna mutacion (un tg-update sin cambios no tiene sentido)."
+    }
+    $appliedMutations = [System.Collections.Generic.List[string]]::new()
+    foreach ($entry in $mutEntries) {
+        if (-not $entry.PSObject.Properties['mutation'] -or [string]::IsNullOrWhiteSpace([string]$entry.mutation)) {
+            throw "Invoke-AdoTaskGroupUpdatePlanGeneration rechazado: una entrada de -MutationSpecPath no tiene 'mutation'."
+        }
+        $mutationName = [string]$entry.mutation
+        $params = @{}
+        foreach ($prop in $entry.PSObject.Properties) {
+            if ($prop.Name -eq 'mutation') { continue }
+            $params[$prop.Name] = ConvertTo-AdoHashtableDeep -InputObject $prop.Value
+        }
+        Write-Host "Aplicando mutacion tg: $mutationName ..." -ForegroundColor Cyan
+        $body = Invoke-AdoTaskGroupMutation -Body $body -Mutation $mutationName -Params $params
+        $appliedMutations.Add($mutationName)
+    }
+
+    # ---- 3) Body final -> disco, y releer UTF8 (misma lectura que Apply),
+    #      para que el bodyHash se compute sobre EXACTAMENTE ese reparse. ----
+    $bodyJsonText = $body | ConvertTo-Json -Depth 60
+    Write-AdoUpdatePlanUtf8NoBom -Path $OutBodyPath -Text $bodyJsonText
+    $reparsedBody = Get-Content -LiteralPath $OutBodyPath -Raw -Encoding UTF8 | ConvertFrom-Json
+
+    # ---- 4) approvedOperations via New-AdoApprovedOperationEntry (calcula el
+    #      bodyHash canonico; nunca acepta un hash a mano). ----
+    $uri = "$($script:AdoCoreBaseUrl)/$Project/_apis/distributedtask/taskgroups/$TaskGroupId`?api-version=$($script:AdoApiVersion)"
+    $null = Assert-AdoOperationRequestMatchesSpec -OperationType 'update-taskgroup' -Method 'PUT' -Uri $uri -Label 'tg-update-plan-generation'
+    $approvedOperation = New-AdoApprovedOperationEntry -OperationId $OperationId -OperationType 'update-taskgroup' -Uri $uri -Body $reparsedBody
+
+    # ---- 5) Plan family='tg-update' -> disco. body embebido = reparsedBody
+    #      (el MISMO sobre el que se calculo el hash). ----
+    $plan = [ordered]@{
+        family             = 'tg-update'
+        organization       = $Organization
+        project            = $Project
+        taskGroupUpdate    = [ordered]@{
+            id   = $TaskGroupId
+            body = $reparsedBody
+        }
+        approvedOperations = @($approvedOperation)
+        validated          = $false
+        validationHash     = $null
+        validationEvidence = $null
+        notes              = @(
+            "Plan tg-update generado por New-AdoTaskGroupUpdatePlan.ps1 -- ninguna escritura en Azure DevOps ejecutada.",
+            "Expone/mapea inputs en el task group EXISTENTE id=$TaskGroupId (recurso COMPARTIDO: requiere su propia aprobacion separada).",
+            "Mutaciones aplicadas: $($appliedMutations -join ', ').",
+            "Apply exige -CurrentTaskGroupJson con el body actual del task group (compare-and-replace)."
+        )
+    }
+    Write-AdoUpdatePlanUtf8NoBom -Path $OutPlanPath -Text ($plan | ConvertTo-Json -Depth 60)
+
+    return [ordered]@{
+        OperationType     = 'update-taskgroup'
+        BodyPath          = $OutBodyPath
+        PlanPath          = $OutPlanPath
+        AppliedMutations  = @($appliedMutations)
+        ApprovedOperation = $approvedOperation
+    }
+}
+
+function Invoke-AdoTaskGroupCreatePlanGeneration {
+    <#
+    Genera un plan family='tg-create' (POST a distributedtask/taskgroups) para
+    CREAR un task group nuevo -- tipicamente CLONANDO uno existente. Reusa
+    Invoke-AdoTaskGroupMutation (Helper #1) para que el clon nazca ya con los
+    inputs/mapeos deseados en UNA sola operacion (ej. exponer 'arguments' y
+    mapearlo a buildAndPush, en vez de clonar a mano + update aparte).
+
+    Modos (exactamente uno):
+    - clone: -SourceTaskGroupJsonPath (GET de un TG existente, desde disco).
+      Se le QUITAN id/revision/_links/createdBy/createdOn/modifiedBy/modifiedOn
+      (campos que ADO asigna/rechaza en un POST) y se le pone -NewName. Luego
+      se aplican las mutaciones de -MutationSpecPath (si hay).
+    - scratch: -BodyJsonPath (un body de task group completo ya armado). Se le
+      quitan los mismos campos de servidor y se le pone -NewName. Mutaciones
+      opcionales igual.
+
+    No hace NINGUNA escritura ni llamada de red: todo sale de disco. El POST
+    real lo hace Apply-AdoClassicPlan.ps1 (Fase 1d), con su propia aprobacion
+    (un task group es recurso COMPARTIDO -> approval-matrix.md).
+    #>
+    param(
+        [Parameter(Mandatory)] [string]$NewName,
+        [Parameter(Mandatory)] [string]$OperationId,
+        [Parameter(Mandatory)] [string]$OutBodyPath,
+        [Parameter(Mandatory)] [string]$OutPlanPath,
+        [string]$SourceTaskGroupJsonPath,
+        [string]$BodyJsonPath,
+        [string]$MutationSpecPath,
+        [string]$Project = 'DevOps',
+        [string]$Organization = 'Shared-Service-GM'
+    )
+
+    if ($Organization -ne 'Shared-Service-GM') {
+        throw "Invoke-AdoTaskGroupCreatePlanGeneration rechazado: esta skill solo opera sobre la organizacion 'Shared-Service-GM'."
+    }
+    if ([string]::IsNullOrWhiteSpace($NewName)) {
+        throw "Invoke-AdoTaskGroupCreatePlanGeneration rechazado: -NewName no puede estar vacio."
+    }
+    $hasSource = -not [string]::IsNullOrWhiteSpace($SourceTaskGroupJsonPath)
+    $hasBody = -not [string]::IsNullOrWhiteSpace($BodyJsonPath)
+    if ($hasSource -eq $hasBody) {
+        throw "Invoke-AdoTaskGroupCreatePlanGeneration rechazado: pasar EXACTAMENTE uno de -SourceTaskGroupJsonPath (clonar) o -BodyJsonPath (from-scratch)."
+    }
+    if ([IO.Path]::GetFullPath($OutBodyPath) -eq [IO.Path]::GetFullPath($OutPlanPath)) {
+        throw "Invoke-AdoTaskGroupCreatePlanGeneration rechazado: OutBodyPath y OutPlanPath deben ser distintos."
+    }
+
+    # ---- 1) Body base desde disco (clone o scratch). El GET de ADO devuelve
+    #      { count, value: [ {tg} ] } o el {tg} directo: aceptar ambas. ----
+    $srcPath = if ($hasSource) { $SourceTaskGroupJsonPath } else { $BodyJsonPath }
+    if (-not (Test-Path -LiteralPath $srcPath)) {
+        throw "Invoke-AdoTaskGroupCreatePlanGeneration rechazado: no existe '$srcPath'."
+    }
+    $rawParsed = Get-Content -LiteralPath $srcPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $rawTg = if ($rawParsed.PSObject.Properties['value'] -and $null -ne $rawParsed.value) { @($rawParsed.value)[0] } else { $rawParsed }
+    if ($null -eq $rawTg -or -not $rawTg.PSObject.Properties['tasks']) {
+        throw "Invoke-AdoTaskGroupCreatePlanGeneration rechazado: el archivo origen no contiene un task group valido (sin 'tasks')."
+    }
+
+    $body = ConvertTo-AdoHashtableDeep -InputObject $rawTg
+
+    # ---- 2) Quitar campos que ADO asigna/rechaza en un POST + renombrar. ----
+    foreach ($serverField in @('id', 'revision', '_links', 'createdBy', 'createdOn', 'modifiedBy', 'modifiedOn', 'url', 'iconUrl')) {
+        if ($body.Contains($serverField)) { $body.Remove($serverField) | Out-Null }
+    }
+    $body['name'] = $NewName
+    if ($body.Contains('friendlyName')) { $body['friendlyName'] = $NewName }
+
+    # ---- 3) Mutaciones opcionales (mismo switch cerrado que tg-update). ----
+    $appliedMutations = [System.Collections.Generic.List[string]]::new()
+    if (-not [string]::IsNullOrWhiteSpace($MutationSpecPath)) {
+        if (-not (Test-Path -LiteralPath $MutationSpecPath)) {
+            throw "Invoke-AdoTaskGroupCreatePlanGeneration rechazado: no existe -MutationSpecPath '$MutationSpecPath'."
+        }
+        $mutParsed = Get-Content -LiteralPath $MutationSpecPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $mutEntries = @()
+        if ($null -ne $mutParsed) { $mutEntries = @($mutParsed) }
+        foreach ($entry in $mutEntries) {
+            if (-not $entry.PSObject.Properties['mutation'] -or [string]::IsNullOrWhiteSpace([string]$entry.mutation)) {
+                throw "Invoke-AdoTaskGroupCreatePlanGeneration rechazado: una entrada de -MutationSpecPath no tiene 'mutation'."
+            }
+            $mutationName = [string]$entry.mutation
+            $params = @{}
+            foreach ($prop in $entry.PSObject.Properties) {
+                if ($prop.Name -eq 'mutation') { continue }
+                $params[$prop.Name] = ConvertTo-AdoHashtableDeep -InputObject $prop.Value
+            }
+            Write-Host "Aplicando mutacion tg (create): $mutationName ..." -ForegroundColor Cyan
+            $body = Invoke-AdoTaskGroupMutation -Body $body -Mutation $mutationName -Params $params
+            $appliedMutations.Add($mutationName)
+        }
+    }
+
+    # ---- 4) Body -> disco, releer UTF8, hash sobre ese reparse. ----
+    $bodyJsonText = $body | ConvertTo-Json -Depth 60
+    Write-AdoUpdatePlanUtf8NoBom -Path $OutBodyPath -Text $bodyJsonText
+    $reparsedBody = Get-Content -LiteralPath $OutBodyPath -Raw -Encoding UTF8 | ConvertFrom-Json
+
+    # ---- 5) approvedOperations via New-AdoApprovedOperationEntry. ----
+    $uri = "$($script:AdoCoreBaseUrl)/$Project/_apis/distributedtask/taskgroups?api-version=$($script:AdoApiVersion)"
+    $null = Assert-AdoOperationRequestMatchesSpec -OperationType 'create-taskgroup' -Method 'POST' -Uri $uri -Label 'tg-create-plan-generation'
+    $approvedOperation = New-AdoApprovedOperationEntry -OperationId $OperationId -OperationType 'create-taskgroup' -Uri $uri -Body $reparsedBody
+
+    # ---- 6) Plan family='tg-create' -> disco. ----
+    $plan = [ordered]@{
+        family             = 'tg-create'
+        organization       = $Organization
+        project            = $Project
+        taskGroupCreate    = [ordered]@{
+            body = $reparsedBody
+        }
+        approvedOperations = @($approvedOperation)
+        validated          = $false
+        validationHash     = $null
+        validationEvidence = $null
+        notes              = @(
+            "Plan tg-create generado por New-AdoTaskGroupCreatePlan.ps1 -- ninguna escritura en Azure DevOps ejecutada.",
+            "Crea el task group NUEVO '$NewName' ($(if ($hasSource) { 'clon de ' + $srcPath } else { 'from-scratch' })) (recurso COMPARTIDO: requiere su propia aprobacion separada).",
+            "Mutaciones aplicadas: $(if ($appliedMutations.Count -gt 0) { $appliedMutations -join ', ' } else { '(ninguna)' })."
+        )
+    }
+    Write-AdoUpdatePlanUtf8NoBom -Path $OutPlanPath -Text ($plan | ConvertTo-Json -Depth 60)
+
+    return [ordered]@{
+        OperationType     = 'create-taskgroup'
+        BodyPath          = $OutBodyPath
+        PlanPath          = $OutPlanPath
+        NewName           = $NewName
+        AppliedMutations  = @($appliedMutations)
+        ApprovedOperation = $approvedOperation
     }
 }

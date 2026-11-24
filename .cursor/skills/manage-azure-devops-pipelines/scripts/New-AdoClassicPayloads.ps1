@@ -75,6 +75,145 @@ function New-AdoVariableGroupPayload {
     }
 }
 
+function New-AdoVariableGroupUpdatePayload {
+    <#
+    Body para PUT .../distributedtask/variablegroups/<id>. Toma el VG actual
+    ($CurrentVariableGroup, obtenido con un GET previo por el llamador) y
+    MUTA solo las variables indicadas en $Plan.variableGroupUpdate.variables,
+    PRESERVANDO todo lo demas (name, type, variableGroupProjectReferences,
+    otras variables que no se tocan). Esto evita perder variables existentes
+    o romper la estructura del VG.
+
+    El llamador es responsable de:
+    1. Hacer el GET del VG actual (lectura, MCP o Get-AdoClassicVariables)
+    2. Pasar el body completo como $CurrentVariableGroup
+    3. Este generador solo da forma al payload de update
+
+    Agregado 2026-10-14 como parte de la capacidad update-variable-group
+    (Pablo pidio que los agentes puedan editar VG existentes).
+    #>
+    param(
+        [Parameter(Mandatory)] $Plan,
+        [Parameter(Mandatory)] $CurrentVariableGroup
+    )
+
+    if (-not $Plan.variableGroupUpdate -or -not $Plan.variableGroupUpdate.id) {
+        throw "New-AdoVariableGroupUpdatePayload: el plan no tiene variableGroupUpdate.id."
+    }
+    if (-not $Plan.variableGroupUpdate.variables -or $Plan.variableGroupUpdate.variables.Count -eq 0) {
+        throw "New-AdoVariableGroupUpdatePayload: el plan no tiene variableGroupUpdate.variables (hashtable de claves a mutar)."
+    }
+    if (-not $CurrentVariableGroup -or -not $CurrentVariableGroup.id) {
+        throw "New-AdoVariableGroupUpdatePayload: CurrentVariableGroup no es un objeto VG valido (falta .id)."
+    }
+    if ([int]$CurrentVariableGroup.id -ne [int]$Plan.variableGroupUpdate.id) {
+        throw "New-AdoVariableGroupUpdatePayload: el id del CurrentVariableGroup ($($CurrentVariableGroup.id)) no coincide con el plan ($($Plan.variableGroupUpdate.id)) -- mismatch peligroso, abortando."
+    }
+
+    # Clonar las variables existentes para no mutar el original.
+    # El VG puede venir como hashtable (desde PowerShell) o PSCustomObject (desde JSON).
+    $variables = [ordered]@{}
+    $sourceVars = $CurrentVariableGroup.variables
+    if ($sourceVars -is [hashtable] -or $sourceVars -is [System.Collections.Specialized.OrderedDictionary]) {
+        # Iterar sobre las keys del hashtable/dictionary
+        foreach ($key in $sourceVars.Keys) {
+            $variables[$key] = $sourceVars[$key]
+        }
+    } else {
+        # Iterar sobre las propiedades del PSCustomObject
+        foreach ($prop in $sourceVars.PSObject.Properties) {
+            $variables[$prop.Name] = $prop.Value
+        }
+    }
+
+    # Aplicar las mutaciones indicadas en el plan.
+    # Igual que arriba, manejar hashtable y PSCustomObject.
+    $planVars = $Plan.variableGroupUpdate.variables
+    $mutationKeys = @()
+    if ($planVars -is [hashtable] -or $planVars -is [System.Collections.Specialized.OrderedDictionary]) {
+        $mutationKeys = @($planVars.Keys)
+    } else {
+        $mutationKeys = @($planVars.PSObject.Properties | ForEach-Object { $_.Name })
+    }
+    
+    foreach ($varName in $mutationKeys) {
+        # El valor del plan puede ser (a) un string plano (comportamiento
+        # historico) o (b) un objeto { secretEnvVar = 'ADO_SECRET_...' } para
+        # declarar una variable SECRETA (agregado 2026-10-29). Un secreto NUNCA
+        # trae value literal: va como placeholder '${ADO_SECRET_...}' +
+        # isSecret=true, y el llamador (Apply Fase 1b) lo resuelve en memoria
+        # con New-AdoBodyWithResolvedSecrets. Asi se dejan los VG dev/uat igual
+        # a cotizadores (containerRegistryPassword secreto) sin exponer el valor.
+        # Acceso ROBUSTO al valor: $planVars puede ser hashtable (indexable por
+        # clave) o PSCustomObject (tras ConvertFrom-Json en Apply, donde
+        # $planVars[$name] devuelve $null). Resolver por tipo.
+        if ($planVars -is [hashtable] -or $planVars -is [System.Collections.Specialized.OrderedDictionary]) {
+            $planVal = $planVars[$varName]
+        } else {
+            $planVal = $planVars.PSObject.Properties[$varName].Value
+        }
+        # Deteccion PRECISA de "objeto secreto": un string SIEMPRE es valor plano
+        # (nunca entra aca, aunque tras ConvertFrom-Json su tipo parezca PSObject);
+        # solo un no-string que EXPONE 'secretEnvVar' es un secreto.
+        $secretEnvVar = $null
+        if ($planVal -isnot [string]) {
+            if ($planVal -is [hashtable] -or $planVal -is [System.Collections.Specialized.OrderedDictionary]) {
+                if ($planVal.Contains('secretEnvVar')) { $secretEnvVar = [string]$planVal['secretEnvVar'] }
+            }
+            elseif ($null -ne $planVal.PSObject -and $null -ne $planVal.PSObject.Properties['secretEnvVar']) {
+                $secretEnvVar = [string]$planVal.secretEnvVar
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($secretEnvVar)) {
+            if ($secretEnvVar -notmatch '^ADO_SECRET_[A-Z0-9_]+$') {
+                throw "New-AdoVariableGroupUpdatePayload: 'secretEnvVar' de '$varName' ('$secretEnvVar') no tiene la forma ADO_SECRET_<NOMBRE>."
+            }
+            # Un secreto NUNCA debe traer un 'value' literal acompanante -- solo
+            # 'secretEnvVar'. Rechazar para no embeber jamas un valor en claro.
+            $hasLiteralValue = $false
+            if ($planVal -is [hashtable] -or $planVal -is [System.Collections.Specialized.OrderedDictionary]) {
+                $hasLiteralValue = $planVal.Contains('value') -and -not [string]::IsNullOrWhiteSpace([string]$planVal['value'])
+            } elseif ($null -ne $planVal.PSObject.Properties['value']) {
+                $hasLiteralValue = -not [string]::IsNullOrWhiteSpace([string]$planVal.value)
+            }
+            if ($hasLiteralValue) {
+                throw "New-AdoVariableGroupUpdatePayload: la variable secreta '$varName' trae un 'value' literal junto a 'secretEnvVar' -- un secreto NUNCA lleva value literal, solo secretEnvVar."
+            }
+            $variables[$varName] = [ordered]@{ value = "`${$secretEnvVar}"; isSecret = $true }
+            continue
+        }
+
+        $newValue = [string]$planVal
+        if ($variables.Contains($varName)) {
+            # La variable existe: reemplazar preservando isSecret si existe
+            $existingVar = $variables[$varName]
+            $isSecret = $false
+            if ($existingVar -is [hashtable] -and $existingVar.ContainsKey('isSecret')) {
+                $isSecret = $existingVar.isSecret
+            } elseif ($null -ne $existingVar.PSObject -and $null -ne $existingVar.PSObject.Properties['isSecret']) {
+                $isSecret = $existingVar.isSecret
+            }
+            if ($isSecret) {
+                $variables[$varName] = [ordered]@{ value = $newValue; isSecret = $true }
+            } else {
+                $variables[$varName] = [ordered]@{ value = $newValue }
+            }
+        } else {
+            # Variable nueva: crear con value simple
+            $variables[$varName] = [ordered]@{ value = $newValue }
+        }
+    }
+
+    # Construir el payload preservando la estructura completa del VG
+    return [ordered]@{
+        id                             = [int]$CurrentVariableGroup.id
+        name                           = [string]$CurrentVariableGroup.name
+        type                           = [string]$CurrentVariableGroup.type
+        variables                      = $variables
+        variableGroupProjectReferences = $CurrentVariableGroup.variableGroupProjectReferences
+    }
+}
+
 # Queue/pool default documentados en references/ado-classic-payload-templates.md
 # -- tomados de Build-portal-cmdb (578) y su Release (360), definiciones
 # reales y funcionales del mismo tipo de app en este mismo proyecto
@@ -862,8 +1001,33 @@ function New-AdoBuildDefinitionPayload {
         $buildVariables['BATCH_PR_TITLE_MARKER'] = [ordered]@{ value = '[AUTO]' }
     }
 
+    # Precedencia de los inputs del step del task group de build (fix 2026-10-29
+    # del gap "helper a medias"): el body del Build se RECONSTRUYE en Apply
+    # (Invoke-AdoApplyPhases llama a esta funcion -Plan $Plan SIN
+    # -BuildTaskGroupInputs), asi que un -BuildTaskGroupInputs pasado SOLO al
+    # generar se perderia en Apply y el Build se crearia con el contrato default
+    # (sin 'arguments' -> en BDIP worker, SIN --target worker: fallo silencioso).
+    # Fix: cuando se pasa -BuildTaskGroupInputs, se PERSISTE en
+    # $Plan.dependencies.buildTaskGroup.inputs (queda en el plan en disco), y
+    # esta funcion lee, por orden: (1) el parametro explicito, (2) lo persistido
+    # en el plan, (3) el contrato default de 6 inputs de Build-MultiStage. Asi el
+    # body que se hashea al generar y el que se reconstruye en Apply son identicos.
+    $persistedBuildTgInputs = $null
+    if ($Plan.PSObject.Properties['dependencies'] -and $Plan.dependencies -and `
+        $Plan.dependencies.PSObject.Properties['buildTaskGroup'] -and $Plan.dependencies.buildTaskGroup -and `
+        $Plan.dependencies.buildTaskGroup.PSObject.Properties['inputs'] -and $Plan.dependencies.buildTaskGroup.inputs) {
+        $persistedBuildTgInputs = $Plan.dependencies.buildTaskGroup.inputs
+    }
     $effectiveBuildTaskGroupInputs = if ($BuildTaskGroupInputs) {
+        # Persistir en el plan para que el Apply (que reconstruye el body sin
+        # el parametro) use EXACTAMENTE los mismos inputs -> bodyHash coincide.
+        # Add-Member -Force (no Set-AdoPSObjectProperty: esa funcion vive en
+        # New-AdoClassicUpdatePayload.ps1, que el CLI de create NO dot-sourcea).
+        $Plan.dependencies.buildTaskGroup | Add-Member -NotePropertyName 'inputs' -NotePropertyValue $BuildTaskGroupInputs -Force
         $BuildTaskGroupInputs
+    }
+    elseif ($persistedBuildTgInputs) {
+        $persistedBuildTgInputs
     }
     else {
         [ordered]@{
@@ -905,8 +1069,22 @@ function New-AdoBuildDefinitionPayload {
     if ($Plan.PSObject.Properties['dockerfile'] -and $Plan.dockerfile -and $Plan.dockerfile.PSObject.Properties['generatedByFileCreator']) {
         $usesVersionedRepoDockerfile = -not [bool]$Plan.dockerfile.generatedByFileCreator
     }
-    if ($usesVersionedRepoDockerfile) {
-        $steps.Add((New-AdoReplaceTokensStep))
+    # 2026-11-24 Dr.Max-Project / Optica-Ecosystem: Dockerfiles versionados
+    # SIN tokens '#{...}#' -- Replace tokens sobra (Builds 713/714/715).
+    # Solo agregar el step si el plan lo pide EXPLICITO (requiresReplaceTokens)
+    # o si el repo NO es Dr.Max-Project y el Dockerfile viene del repo.
+    # Buklo con '#{appname}#' en Dockerfile: setear dockerfile.requiresReplaceTokens=true
+    # o dejar repo fuera de Dr.Max-Project (comportamiento historico).
+    $requiresReplaceTokens = $false
+    if ($Plan.PSObject.Properties['dockerfile'] -and $Plan.dockerfile -and $Plan.dockerfile.PSObject.Properties['requiresReplaceTokens']) {
+        $requiresReplaceTokens = [bool]$Plan.dockerfile.requiresReplaceTokens
+    }
+    $repoProjectForReplace = if ($Plan.repo -and $Plan.repo.project) { [string]$Plan.repo.project } else { '' }
+    $skipReplaceTokensForDrMax = ($repoProjectForReplace -eq 'Dr.Max-Project') -and (-not $requiresReplaceTokens)
+    if ($usesVersionedRepoDockerfile -and -not $skipReplaceTokensForDrMax) {
+        if ($requiresReplaceTokens -or ($repoProjectForReplace -ne 'Dr.Max-Project')) {
+            $steps.Add((New-AdoReplaceTokensStep))
+        }
     }
     $steps.Add((New-AdoFileCreatorStep -DisplayName 'File Creator deployment-dev.yml' -FilePath './deployment-dev.yml' -FileContent $DeploymentManifests['dev'] -Enabled $true))
     $steps.Add((New-AdoFileCreatorStep -DisplayName 'File Creator deployment-uat.yml' -FilePath './deployment-uat.yml' -FileContent $DeploymentManifests['uat'] -Enabled $true))
@@ -1054,6 +1232,13 @@ function New-AdoReleaseEnvironmentEntry {
         [bool]$ApprovalRequired = $false,
         [string]$ReportarResultadoTaskGroupId,
         [hashtable]$StageVariables,
+        # Approver de la aprobacion MANUAL (fix 2026-10-29): solo aplica
+        # con -ApprovalRequired. -ApproverId es el id de grupo/usuario
+        # (p.ej. 'Release Executers'); -ReleaseCreatorCanBeApprover por
+        # defecto $false. Se emiten en la entrada y los consume
+        # New-AdoReleaseDefinitionPayload.
+        [string]$ApproverId,
+        [bool]$ReleaseCreatorCanBeApprover = $false,
         # Campos usados segun el contrato de $DeployTaskGroupName (ver
         # tabla de arriba) -- pasar solo los que ese contrato pide,
         # el resto se ignora si no aplica.
@@ -1114,6 +1299,8 @@ function New-AdoReleaseEnvironmentEntry {
         approvalRequired      = $ApprovalRequired
     }
     if ($StageVariables) { $entry['stageVariables'] = $StageVariables }
+    if (-not [string]::IsNullOrWhiteSpace($ApproverId)) { $entry['approverId'] = $ApproverId }
+    if ($ReleaseCreatorCanBeApprover) { $entry['releaseCreatorCanBeApprover'] = $true }
     if (-not [string]::IsNullOrWhiteSpace($ReportarResultadoTaskGroupId)) { $entry['reportarResultadoTaskGroupId'] = $ReportarResultadoTaskGroupId }
 
     return $entry
@@ -1208,17 +1395,34 @@ function New-AdoReleaseDefinitionPayload {
                 return $vars
             })
             variableGroups   = @([int]$env['variableGroupId'])
-            preDeployApprovals  = [ordered]@{
-                approvals       = @([ordered]@{ rank = 1; isAutomated = $isAutomated; isNotificationOn = $false })
-                approvalOptions = [ordered]@{
-                    requiredApproverCount                             = $null
-                    releaseCreatorCanBeApprover                       = $false
-                    autoTriggeredAndPreviousEnvironmentApprovedCanBeSkipped = $false
-                    enforceIdentityRevalidation                       = $false
-                    timeoutInMinutes                                  = 0
-                    executionOrder                                    = 'beforeGates'
+            preDeployApprovals  = (& {
+                # Fix 2026-10-29 (gap del path de aprobacion MANUAL, nunca
+                # ejercitado antes): una aprobacion manual (isAutomated=$false)
+                # EXIGE un approver -- la API rechaza/deja roto el stage si el
+                # approval manual no lleva approver={id=...}. Cuando el env trae
+                # 'approverId' (un grupo/usuario, p.ej. 'Release Executers'
+                # 397ddbfe...) se emite el objeto approver y se respeta
+                # 'releaseCreatorCanBeApprover' (default $false). Un stage
+                # automatico (approvalRequired=$false) NO lleva approver, igual
+                # que antes -- comportamiento historico intacto.
+                $approvalEntry = [ordered]@{ rank = 1; isAutomated = $isAutomated; isNotificationOn = $false }
+                if (-not $isAutomated -and $env.ContainsKey('approverId') -and -not [string]::IsNullOrWhiteSpace([string]$env['approverId'])) {
+                    $approvalEntry['approver'] = [ordered]@{ id = [string]$env['approverId'] }
                 }
-            }
+                $creatorCanApprove = $false
+                if ($env.ContainsKey('releaseCreatorCanBeApprover')) { $creatorCanApprove = [bool]$env['releaseCreatorCanBeApprover'] }
+                [ordered]@{
+                    approvals       = @($approvalEntry)
+                    approvalOptions = [ordered]@{
+                        requiredApproverCount                             = $null
+                        releaseCreatorCanBeApprover                       = $creatorCanApprove
+                        autoTriggeredAndPreviousEnvironmentApprovedCanBeSkipped = $false
+                        enforceIdentityRevalidation                       = $false
+                        timeoutInMinutes                                  = 0
+                        executionOrder                                    = 'beforeGates'
+                    }
+                }
+            })
             postDeployApprovals = [ordered]@{
                 approvals       = @([ordered]@{ rank = 1; isAutomated = $true; isNotificationOn = $false })
                 approvalOptions = [ordered]@{
@@ -1377,7 +1581,7 @@ function New-AdoApprovedOperationEntry {
     #>
     param(
         [Parameter(Mandatory)] [string]$OperationId,
-        [Parameter(Mandatory)] [ValidateSet('create-variable-group', 'create-build-definition', 'create-release-definition', 'update-build-definition', 'update-release-definition', 'delete-variable-group', 'delete-build-definition', 'delete-release-definition')] [string]$OperationType,
+        [Parameter(Mandatory)] [ValidateSet('create-variable-group', 'create-build-definition', 'create-release-definition', 'update-variable-group', 'update-build-definition', 'update-release-definition', 'update-taskgroup', 'create-taskgroup', 'delete-variable-group', 'delete-build-definition', 'delete-release-definition')] [string]$OperationType,
         [Parameter(Mandatory)] [string]$Uri,
         # [AllowNull()] a proposito: los 3 operationType delete-* SIEMPRE
         # pasan $null aca (un DELETE nunca lleva body) -- sin este
@@ -1444,7 +1648,16 @@ function Invoke-AdoApplyPhases {
         # funcion), cuyo contenido es EXACTAMENTE lo que se hasheo al
         # aprobar la operacion.
         [string]$UpdateBuildBodyPath,
-        [string]$UpdateReleaseBodyPath
+        [string]$UpdateReleaseBodyPath,
+        # Fase 1b (update-variable-group, agregada 2026-10-14): el body
+        # actual del VG obtenido con un GET previo, necesario para
+        # preservar variables existentes al mutar solo algunas. JSON string.
+        [string]$CurrentVariableGroupJson,
+        # Fase 1c (update-taskgroup, agregada 2026-10-16): el body actual
+        # del task group (GET previo), para confirmar que la revision en
+        # vivo es exactamente la que el plan esperaba editar antes del PUT
+        # (anti-pisada de un cambio concurrente). JSON string.
+        [string]$CurrentTaskGroupJson
     )
 
     if ($null -eq $CreatedSoFar) {
@@ -1496,6 +1709,166 @@ function Invoke-AdoApplyPhases {
             $vgResult = Invoke-AdoRest -Method POST -Uri $vgUri -Body $vgBody -RequireApprovedPlan -PlanPath $PlanPath -OperationId $vgOp.operationId
             $CreatedSoFar.Add("Variable Group '$($Plan.variableGroup.name)' (id $($vgResult.Body.id))")
             Write-Host "Variable Group creado: id=$($vgResult.Body.id)" -ForegroundColor Green
+        }
+    }
+
+    # ---- Fase 1b: Variable Group UPDATE ----
+    # Agregado 2026-10-14 (Pablo). El update de un VG existente va separado
+    # del create porque requiere diferente payload (viene de $CurrentVariableGroupJson
+    # que trae el body actual del VG, no de $Plan.variableGroup que es para crear).
+    $vgUpdateOp = Get-AdoApprovedOpByTypeLocal -OperationType 'update-variable-group'
+    if ($vgUpdateOp) {
+        if (Test-AdoOperationAlreadySucceededLocal -OperationId $vgUpdateOp.operationId) {
+            Write-Host "Fase 1b (Variable Group update id=$($Plan.variableGroupUpdate.id)): ya estaba 'succeeded' en el journal de una corrida anterior -- se omite, no se reintenta." -ForegroundColor Yellow
+        }
+        else {
+            if (-not $Plan.variableGroupUpdate -or -not $Plan.variableGroupUpdate.id) {
+                throw "Apply-AdoClassicPlan rechazado: el plan tiene aprobada 'update-variable-group' pero falta plan.variableGroupUpdate.id."
+            }
+            if (-not $CurrentVariableGroupJson) {
+                throw "Apply-AdoClassicPlan rechazado: el plan tiene aprobada 'update-variable-group' pero no se paso -CurrentVariableGroupJson (el body actual del VG obtenido con un GET previo, necesario para preservar variables existentes)."
+            }
+
+            $currentVG = $null
+            try {
+                $currentVG = $CurrentVariableGroupJson | ConvertFrom-Json
+            }
+            catch {
+                throw "Apply-AdoClassicPlan rechazado: -CurrentVariableGroupJson no es JSON valido: $($_.Exception.Message)"
+            }
+
+            Write-Host "Fase 1b: Variable Group update (id=$($Plan.variableGroupUpdate.id), name='$($currentVG.name)')..." -ForegroundColor Cyan
+
+            $vgUpdateBody = New-AdoVariableGroupUpdatePayload -Plan $Plan -CurrentVariableGroup $currentVG
+            $vgUpdateUri = "$($script:AdoCoreBaseUrl)/$($Plan.project)/_apis/distributedtask/variablegroups/$($Plan.variableGroupUpdate.id)?api-version=$($script:AdoApiVersion)"
+            # Secretos (agregado 2026-10-29): una variable del plan declarada como
+            # objeto { secretEnvVar='ADO_SECRET_...' } quedo en el body como
+            # placeholder '${ADO_SECRET_...}' + isSecret=true. Se arma su
+            # SecretReference (Path=variables.<name>.value) para que Invoke-AdoRest
+            # valide el bodyHash sobre el placeholder y resuelva el valor real SOLO
+            # para el PUT (nunca se hashea ni se loggea el secreto).
+            $vgSecretRefs = [System.Collections.Generic.List[object]]::new()
+            $planUpdVars = $Plan.variableGroupUpdate.variables
+            $updVarNames = if ($planUpdVars -is [hashtable] -or $planUpdVars -is [System.Collections.Specialized.OrderedDictionary]) { @($planUpdVars.Keys) } else { @($planUpdVars.PSObject.Properties | ForEach-Object { $_.Name }) }
+            foreach ($uvn in $updVarNames) {
+                $uv = $planUpdVars[$uvn]
+                $sev = $null
+                if ($uv -is [hashtable] -or $uv -is [System.Collections.Specialized.OrderedDictionary]) {
+                    if ($uv.Contains('secretEnvVar')) { $sev = [string]$uv['secretEnvVar'] }
+                } elseif ($uv -is [System.Management.Automation.PSObject] -and $null -ne $uv.PSObject.Properties['secretEnvVar']) {
+                    $sev = [string]$uv.secretEnvVar
+                }
+                if (-not [string]::IsNullOrWhiteSpace($sev)) {
+                    $vgSecretRefs.Add(@{ Path = "variables.$uvn.value"; EnvVarName = $sev })
+                }
+            }
+            $vgUpdateInvokeParams = @{ Method = 'PUT'; Uri = $vgUpdateUri; Body = $vgUpdateBody; RequireApprovedPlan = $true; PlanPath = $PlanPath; OperationId = $vgUpdateOp.operationId }
+            if ($vgSecretRefs.Count -gt 0) { $vgUpdateInvokeParams['SecretReferences'] = @($vgSecretRefs) }
+            $vgUpdateResult = Invoke-AdoRest @vgUpdateInvokeParams
+            $CreatedSoFar.Add("Variable Group update '$($currentVG.name)' (id $($Plan.variableGroupUpdate.id))")
+            Write-Host "Variable Group actualizado: id=$($vgUpdateResult.Body.id)" -ForegroundColor Green
+        }
+    }
+
+    # ---- Fase 1c: Task Group UPDATE (agregada 2026-10-16) ----
+    # PUT a un task group COMPARTIDO existente. A diferencia de la fase 1b
+    # (VG, que hace merge para preservar variables), aca el body rev N+1
+    # YA VIENE COMPLETO en $Plan.taskGroupUpdate.body -- no se reconstruye
+    # ni se mergea. Lo unico que se consulta de $CurrentTaskGroupJson es la
+    # REVISION en vivo: debe ser exactamente la que el plan esperaba editar
+    # (body.revision - 1), para no pisar un cambio concurrente que haya
+    # subido la revision entre que se genero el plan y se aplica.
+    $tgUpdateOp = Get-AdoApprovedOpByTypeLocal -OperationType 'update-taskgroup'
+    if ($tgUpdateOp) {
+        if (Test-AdoOperationAlreadySucceededLocal -OperationId $tgUpdateOp.operationId) {
+            Write-Host "Fase 1c (Task Group update id=$($Plan.taskGroupUpdate.id)): ya estaba 'succeeded' en el journal de una corrida anterior -- se omite, no se reintenta." -ForegroundColor Yellow
+        }
+        else {
+            if (-not $Plan.taskGroupUpdate -or -not $Plan.taskGroupUpdate.id) {
+                throw "Apply-AdoClassicPlan rechazado: el plan tiene aprobada 'update-taskgroup' pero falta plan.taskGroupUpdate.id."
+            }
+            if (-not $Plan.taskGroupUpdate.body) {
+                throw "Apply-AdoClassicPlan rechazado: el plan tiene aprobada 'update-taskgroup' pero falta plan.taskGroupUpdate.body (el task group completo rev N+1 a enviar)."
+            }
+            if (-not $CurrentTaskGroupJson) {
+                throw "Apply-AdoClassicPlan rechazado: el plan tiene aprobada 'update-taskgroup' pero no se paso -CurrentTaskGroupJson (el body actual del task group obtenido con un GET previo, necesario para confirmar la revision en vivo antes de pisarla)."
+            }
+
+            $currentTG = $null
+            try {
+                $currentTG = $CurrentTaskGroupJson | ConvertFrom-Json
+            }
+            catch {
+                throw "Apply-AdoClassicPlan rechazado: -CurrentTaskGroupJson no es JSON valido: $($_.Exception.Message)"
+            }
+
+            # Confirmacion de identidad: el id del TG en vivo debe ser el del plan.
+            if ([string]$currentTG.id -ne [string]$Plan.taskGroupUpdate.id) {
+                throw "Apply-AdoClassicPlan rechazado: el task group en vivo (id=$($currentTG.id)) no coincide con el del plan (id=$($Plan.taskGroupUpdate.id)). No se aplica."
+            }
+
+            # Anti-pisada concurrente: el body lleva la revision VIGENTE
+            # (ADO la incrementa solo al aplicar). La revision en vivo debe
+            # ser EXACTAMENTE esa. Si alguien edito el TG entre la generacion
+            # del plan y el apply, la revision en vivo no coincidira -> se
+            # aborta en vez de sobrescribir ciegamente.
+            $expectedLiveRevision = [int]$Plan.taskGroupUpdate.body.revision
+            if ([int]$currentTG.revision -ne $expectedLiveRevision) {
+                throw "Apply-AdoClassicPlan rechazado: el task group en vivo esta en revision $($currentTG.revision), pero el plan esperaba la revision vigente $expectedLiveRevision (ADO la subira a $($expectedLiveRevision + 1)). Alguien edito el task group desde que se genero el plan. Regenerar el plan contra el estado actual antes de reintentar."
+            }
+
+            Write-Host "Fase 1c: Task Group update (id=$($Plan.taskGroupUpdate.id), name='$($currentTG.name)', rev $($currentTG.revision) -> $($currentTG.revision + 1))..." -ForegroundColor Cyan
+
+            # El body se pasa como OBJETO (no string): Invoke-AdoRest lo
+            # serializa una sola vez con ConvertTo-Json. Pasar un string
+            # pre-serializado causaba doble serializacion -> el servidor
+            # recibia un string JSON escapado y devolvia 500 'Input
+            # TaskGroup parameter cannot be null'. El bodyHash del plan se
+            # calcula sobre el MISMO objeto (ver generador), via
+            # Get-AdoBodyCanonicalHash, asi que coincide.
+            $tgUpdateBody = $Plan.taskGroupUpdate.body
+            $tgUpdateUri = "$($script:AdoCoreBaseUrl)/$($Plan.project)/_apis/distributedtask/taskgroups/$($Plan.taskGroupUpdate.id)?api-version=$($script:AdoApiVersion)"
+            $tgUpdateResult = Invoke-AdoRest -Method PUT -Uri $tgUpdateUri -Body $tgUpdateBody -RequireApprovedPlan -PlanPath $PlanPath -OperationId $tgUpdateOp.operationId
+            $CreatedSoFar.Add("Task Group update '$($currentTG.name)' (id $($Plan.taskGroupUpdate.id), rev -> $($Plan.taskGroupUpdate.body.revision))")
+            Write-Host "Task Group actualizado: id=$($tgUpdateResult.Body.id) rev=$($tgUpdateResult.Body.revision)" -ForegroundColor Green
+        }
+    }
+
+    # ---- Fase 1d: Task Group CREATE (agregada 2026-10-29) ----
+    # POST para crear/clonar un task group NUEVO. A diferencia de la fase 1c
+    # (update, PUT a un id existente), aca el id lo asigna ADO -> la URI es la
+    # ruta base (sin id), el body NO lleva id, y no hay -CurrentTaskGroupJson
+    # que confirmar. El body completo YA VIENE en $Plan.taskGroupCreate.body
+    # (su bodyHash fue aprobado). Chequeo en vivo anti-duplicado por NOMBRE
+    # antes de escribir (igual criterio que VG/Build/Release create).
+    $tgCreateOp = Get-AdoApprovedOpByTypeLocal -OperationType 'create-taskgroup'
+    if ($tgCreateOp) {
+        if (Test-AdoOperationAlreadySucceededLocal -OperationId $tgCreateOp.operationId) {
+            Write-Host "Fase 1d (Task Group create '$($Plan.taskGroupCreate.body.name)'): ya estaba 'succeeded' en el journal de una corrida anterior -- se omite, no se reintenta." -ForegroundColor Yellow
+        }
+        else {
+            if (-not $Plan.taskGroupCreate -or -not $Plan.taskGroupCreate.body) {
+                throw "Apply-AdoClassicPlan rechazado: el plan tiene aprobada 'create-taskgroup' pero falta plan.taskGroupCreate.body (el task group completo a crear)."
+            }
+            $tgCreateName = [string]$Plan.taskGroupCreate.body.name
+            if ([string]::IsNullOrWhiteSpace($tgCreateName)) {
+                throw "Apply-AdoClassicPlan rechazado: plan.taskGroupCreate.body.name vacio."
+            }
+            # Anti-duplicado en vivo por nombre: un task group nuevo con un
+            # nombre ya usado es casi siempre un error (re-corrida sin journal).
+            $tgListUri = "$($script:AdoCoreBaseUrl)/$($Plan.project)/_apis/distributedtask/taskgroups?api-version=$($script:AdoApiVersion)"
+            $tgList = (Invoke-AdoRest -Method GET -Uri $tgListUri).Body
+            $tgDup = @($tgList.value | Where-Object { [string]$_.name -eq $tgCreateName })
+            if ($tgDup.Count -gt 0) {
+                throw "Apply-AdoClassicPlan detenido ANTES de escribir: ya existe un Task Group llamado '$tgCreateName' en el proyecto '$($Plan.project)' (id $($tgDup[0].id)). No se crea un duplicado. Si la corrida anterior ya lo creo y el journal se perdio, reconciliar manualmente antes de reintentar."
+            }
+
+            Write-Host "Fase 1d: Task Group create '$tgCreateName'..." -ForegroundColor Cyan
+            $tgCreateBody = $Plan.taskGroupCreate.body
+            $tgCreateUri = "$($script:AdoCoreBaseUrl)/$($Plan.project)/_apis/distributedtask/taskgroups?api-version=$($script:AdoApiVersion)"
+            $tgCreateResult = Invoke-AdoRest -Method POST -Uri $tgCreateUri -Body $tgCreateBody -RequireApprovedPlan -PlanPath $PlanPath -OperationId $tgCreateOp.operationId
+            $CreatedSoFar.Add("Task Group create '$tgCreateName' (id $($tgCreateResult.Body.id))")
+            Write-Host "Task Group creado: id=$($tgCreateResult.Body.id) name='$($tgCreateResult.Body.name)'" -ForegroundColor Green
         }
     }
 
@@ -1591,6 +1964,17 @@ function Invoke-AdoApplyPhases {
                     deployTaskGroupName   = [string]$_.deployTaskGroupName
                     deployTaskGroupInputs = ($_.deployTaskGroupInputs | ForEach-Object { $_ })
                     approvalRequired      = [bool]$_.approvalRequired
+                }
+                # Mismo passthrough del approver que el bloque de generacion
+                # (New-AdoClassicCreatePlan ~L148). DEBE espejar exactamente a
+                # aquel: si uno agrega campos al body y el otro no, el body
+                # reconstruido en Apply difiere del aprobado -> rompe el bodyHash
+                # (mismo tipo de bug que el de 2026-08-26 de arriba).
+                if ($_.PSObject.Properties['approverId'] -and -not [string]::IsNullOrWhiteSpace([string]$_.approverId)) {
+                    $envEntry['approverId'] = [string]$_.approverId
+                }
+                if ($_.PSObject.Properties['releaseCreatorCanBeApprover']) {
+                    $envEntry['releaseCreatorCanBeApprover'] = [bool]$_.releaseCreatorCanBeApprover
                 }
                 # Bug real encontrado 2026-08-26 (aplicando Administracion-de-proyectos):
                 # estos 2 campos opcionales que New-AdoReleaseEnvironmentEntry SI produce

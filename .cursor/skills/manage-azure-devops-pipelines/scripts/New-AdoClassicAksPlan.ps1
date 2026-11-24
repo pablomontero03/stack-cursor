@@ -395,6 +395,10 @@ $plan = [PSCustomObject]@{
         rutadockerfile  = $rutaDockerfileEfectiva
         generatedByFileCreator = [bool]$RutaDockerfile -and ($RutaDockerfile -ne $Dockerfile)
         isMonorepo      = -not [string]::IsNullOrWhiteSpace($ServiceName)
+        # Dr.Max-Project / Optica: Dockerfiles sin '#{...}#' → false (default).
+        # Buklo con tokens en Dockerfile versionado → pasar -RequiresReplaceTokens
+        # o setear true en el plan antes de New-AdoBuildDefinitionPayload.
+        requiresReplaceTokens = $false
     }
 
     buildVariables = $buildVariables
