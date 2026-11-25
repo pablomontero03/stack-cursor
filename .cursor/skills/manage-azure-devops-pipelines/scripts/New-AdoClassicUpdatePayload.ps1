@@ -549,6 +549,43 @@ function Set-AdoBuildTriggerPathFilter {
     return $Build
 }
 
+function Set-AdoBuildRepository {
+    <#
+    Reapunta el repository de un Build YA EXISTENTE a otro repo TfsGit
+    (mismo u otro proyecto de la org). Caso real 2026-11-25: pipelines
+    Build-Buklo-*-web seguian en el monorepo buklo-web tras el split
+    (Epic 48572) y fallaban por Dockerfiles/pathFilters viejos.
+    Conserva properties/clean/checkoutSubmodules del GET; solo cambia
+    id/name/url/type/defaultBranch.
+    #>
+    param(
+        [Parameter(Mandatory)] $Build,
+        [Parameter(Mandatory)] [string]$RepositoryId,
+        [Parameter(Mandatory)] [string]$RepositoryName,
+        [Parameter(Mandatory)] [string]$RepositoryUrl,
+        [string]$DefaultBranch = 'refs/heads/development',
+        [string]$RepositoryType = 'TfsGit'
+    )
+    if (-not $Build.PSObject.Properties['repository'] -or $null -eq $Build.repository) {
+        throw "Set-AdoBuildRepository: el Build no tiene 'repository'."
+    }
+    if ($RepositoryId -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
+        throw "Set-AdoBuildRepository: -RepositoryId debe ser un UUID. Encontrado: '$RepositoryId'."
+    }
+    if ([string]::IsNullOrWhiteSpace($RepositoryName)) {
+        throw "Set-AdoBuildRepository: -RepositoryName no puede estar vacio."
+    }
+    if ([string]::IsNullOrWhiteSpace($RepositoryUrl)) {
+        throw "Set-AdoBuildRepository: -RepositoryUrl no puede estar vacio."
+    }
+    Set-AdoPSObjectProperty -Object $Build.repository -Name 'id' -Value $RepositoryId
+    Set-AdoPSObjectProperty -Object $Build.repository -Name 'name' -Value $RepositoryName
+    Set-AdoPSObjectProperty -Object $Build.repository -Name 'url' -Value $RepositoryUrl
+    Set-AdoPSObjectProperty -Object $Build.repository -Name 'type' -Value $RepositoryType
+    Set-AdoPSObjectProperty -Object $Build.repository -Name 'defaultBranch' -Value $DefaultBranch
+    return $Build
+}
+
 function Add-AdoBuildVariables {
     <#
     Agrega/sobreescribe variables de pipeline del Build. Cada valor de
@@ -1028,7 +1065,7 @@ function New-AdoClassicUpdateApprovedOperation {
 $script:AdoUpdateSpliceAllowedFunctions = @(
     'Set-AdoFileCreatorContent', 'Set-AdoAzureCliInlineScriptContent', 'Add-AdoBuildPhase', 'Add-AdoBuildStepToPhase',
     'Add-AdoBuildStepAfterDisplayName', 'Add-AdoBuildReplaceTokensStep', 'Remove-AdoBuildStepByDisplayName',
-    'Set-AdoBuildTriggerMaxConcurrentBuilds', 'Set-AdoBuildTriggerPathFilter', 'Add-AdoBuildVariables', 'Set-AdoBuildTaskGroupStepInputs', 'Add-AdoBuildMergeBatchingSplice',
+    'Set-AdoBuildTriggerMaxConcurrentBuilds', 'Set-AdoBuildTriggerPathFilter', 'Set-AdoBuildRepository', 'Add-AdoBuildVariables', 'Set-AdoBuildTaskGroupStepInputs', 'Add-AdoBuildMergeBatchingSplice',
     'Set-AdoReleaseEnvironmentVariableGroups', 'Add-AdoReleaseEnvironmentCdTrigger',
     'Set-AdoReleaseProductionApprovalGate', 'Add-AdoReleaseEnvironmentReportarResultadoHu',
     'Set-AdoReleaseEnvironmentVariables', 'Set-AdoReleaseEnvironmentDeployTaskGroup'
@@ -1113,6 +1150,10 @@ function Invoke-AdoUpdateSplice {
         'Set-AdoBuildTriggerPathFilter' {
             if ($Kind -ne 'Build') { throw "Invoke-AdoUpdateSplice: 'Set-AdoBuildTriggerPathFilter' solo aplica a -Kind Build." }
             return Set-AdoBuildTriggerPathFilter @Params -Build $Target
+        }
+        'Set-AdoBuildRepository' {
+            if ($Kind -ne 'Build') { throw "Invoke-AdoUpdateSplice: 'Set-AdoBuildRepository' solo aplica a -Kind Build." }
+            return Set-AdoBuildRepository @Params -Build $Target
         }
         'Add-AdoBuildVariables' {
             if ($Kind -ne 'Build') { throw "Invoke-AdoUpdateSplice: 'Add-AdoBuildVariables' solo aplica a -Kind Build." }
