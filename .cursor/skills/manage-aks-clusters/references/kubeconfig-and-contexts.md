@@ -10,7 +10,7 @@
 
 El uso interno del kubeconfig ya resuelto para autenticarse y conectar
 contra un clúster ya configurado **no requiere aprobación** — ver
-`.claude/rules/aks/security.md` § Kubeconfig para la justificación
+`.cursor/rules/aks.mdc` (sección Seguridad) para la justificación
 completa de por qué esto difiere de la conexión SSH a `172.16.2.60`.
 
 ## Comandos sanitizados para inventario (sin aprobación)
@@ -97,3 +97,28 @@ opciones).
 `plan.cluster.context` antes de aplicar — si cambió desde que se generó el
 plan, la aplicación se rechaza automáticamente (ver
 `change-workflow.md`).
+
+## Acceso a `gmon-prod-aks-eastus2-0001` (NSG)
+
+El API privado del 0001 (`10.4.0.10:443`) está cerrado por defecto con la
+regla NSG `PRODAKS1_Rule` en
+`gmon-hub-ComputeSubnet-nsg-eastus2-0001` / rg `gmon_hub_rg_eastus2_0001`
+(`Deny`). Un timeout a ese API es casi siempre la NSG en Deny, no un fallo
+de auth. El 0004 no usa esta regla.
+
+Ciclo obligatorio (pedir aprobación antes de Allow; cerrar siempre):
+
+```bash
+# Abrir
+az account show
+az network nsg rule update --name PRODAKS1_Rule --nsg-name gmon-hub-ComputeSubnet-nsg-eastus2-0001 --resource-group gmon_hub_rg_eastus2_0001 --access Allow
+
+# ... kubectl --context gmon-prod-aks-eastus2-0001 ...
+
+# Cerrar
+az account show
+az network nsg rule update --name PRODAKS1_Rule --nsg-name gmon-hub-ComputeSubnet-nsg-eastus2-0001 --resource-group gmon_hub_rg_eastus2_0001 --access Deny
+```
+
+Nunca dejar la regla en `Allow`. Detalle completo en `.cursor/rules/aks.mdc`
+§ Acceso al AKS 0001.

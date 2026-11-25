@@ -15,12 +15,40 @@ Objetos internos de Kubernetes y Helm en los clusters AKS de Grupo Montecristo: 
 | Contexto | Tipo | Estado |
 |---|---|---|
 | `k3s-dev` | k3s desarrollo | Activo (`172.16.2.43:6443`) |
+| `prod-onprem-01` | k3s producción on-prem | Activo (`172.16.2.31:6443`, nodo `srvdesarrollo03`) |
 | `gmon-prod-aks-eastus2-0001` | AKS privado prod | Activo |
 | `gmon-prod-aks-eastus2-0004` | AKS privado prod | Activo |
 | `gmon-dev-aks-eastus2-0001` | AKS privado dev | Apagado |
 | `gmon-qa-aks-eastus2-0001/0002` | AKS privado QA | Apagados |
 
+**`prod-onprem-01`** — cluster k3s de producción on-prem en `srvdesarrollo03` (`172.16.2.31:6443`). Accesible directamente desde esta máquina sin NSG. Namespaces relevantes: `tools-devops` (cicd-dashboard, k8s-dashboard-hub), `k8s-dashboard`. Los archivos de `src/` del cicd-dashboard se inyectan como ConfigMaps (`cicd-dashboard-html`, `cicd-dashboard-server`, `cicd-dashboard-ado`, `cicd-dashboard-teams`) — el pipeline de release **no los actualiza automáticamente**; hay que hacerlo manualmente con `kubectl create configmap --from-file ... | kubectl apply` + rollout restart.
+
 Siempre confirmar el contexto activo con `kubectl config current-context` antes de operar. **Nunca asumir que un contexto o namespace citado en docs está vigente.**
+
+### Acceso al AKS 0001 — NSG cerrada por defecto (regla obligatoria)
+
+El API server privado de `gmon-prod-aks-eastus2-0001` (`10.4.0.10:443`) está detrás de la regla NSG **`PRODAKS1_Rule`** (nsg `gmon-hub-ComputeSubnet-nsg-eastus2-0001`, rg `gmon_hub_rg_eastus2_0001`, Outbound `10.1.0.200 → 10.4.0.10:443`, prioridad 1100), que está en **`Deny` por defecto**. Este host sale con `src 10.1.0.200`, la misma identidad de red del agente ADO, así que el mismo candado que afecta al pipeline lo afecta a él. Un timeout al 0001 (`dial tcp 10.4.0.10:443: i/o timeout`) es **la NSG en Deny, NO un problema de auth ni de `az login`**. El 0004 no pasa por esta regla y conecta directo.
+
+> **Acceso del agente sin `az login` interactivo:** desde la VM del hub, el agente se autentica con la Managed Identity `id-kiro-agent-hub` (`az login --identity --client-id "$KIRO_AZURE_MI_CLIENT_ID"`, clientId `689b038a-9e4c-490f-99cf-886eb89a4870`), que tiene `Network Contributor` sobre esta NSG y `Cluster User Role` sobre el 0001 — así puede ejecutar el ciclo Allow→kubectl→Deny por sí mismo. Si `az account show` falla, re-loguear con la MI. Detalle: `docs/azure/MANAGED-IDENTITY-AGENTE-HUB.md`.
+
+**Ciclo OBLIGATORIO para conectar al 0001** (idéntico a lo que hace el Release def 273 / env 279). Abrir/cerrar la NSG es cambio de red en producción: **pedir aprobación antes de Allow** y **cerrar siempre al terminar**.
+
+**Abrir (antes de kubectl al 0001):**
+```bash
+az account show
+az network nsg rule update --name PRODAKS1_Rule --nsg-name gmon-hub-ComputeSubnet-nsg-eastus2-0001 --resource-group gmon_hub_rg_eastus2_0001 --access Allow
+```
+Esperar ~25-30s a que propague la NSG, luego: `kubectl --context gmon-prod-aks-eastus2-0001 ...`
+
+**Cerrar (al terminar el trabajo, sin excepción):**
+```bash
+az account show
+az network nsg rule update --name PRODAKS1_Rule --nsg-name gmon-hub-ComputeSubnet-nsg-eastus2-0001 --resource-group gmon_hub_rg_eastus2_0001 --access Deny
+```
+
+**Nunca dejar `PRODAKS1_Rule` en `Allow` sin cerrarla.** Si la consulta es puntual, cerrar de inmediato tras operar. Si la conexión debe quedar abierta durante un trabajo más largo, **preguntar explícitamente al usuario "¿ya terminamos, cierro la NSG?" antes de finalizar la sesión** y no dejarla abierta. Diagnóstico rápido: `curl -sk --max-time 12 https://10.4.0.10:443/livez` → `http_code=000` = NSG en Deny; `http_code=401` = red abierta, servidor pidiendo auth.
+
+> Alternativa de solo lectura sin abrir NSG: `az aks command invoke -g gmon_prod_rg_eastus2_0001 -n gmon-prod-aks-eastus2-0001 --command "kubectl ..."`. Para trabajo interactivo con `kubectl` local, usar siempre el ciclo Allow→trabajo→Deny.
 
 ## Conexión — MCP aks
 
@@ -50,3 +78,6 @@ New-AksChangePlan.ps1 → Test-AksChangePlan.ps1 → [aprobación] → Apply-Aks
 
 - Skill: `.cursor/skills/manage-aks-clusters/SKILL.md`
 - Docs: `docs/aks/` (si existe)
+- Dashboards Grafana (patrones RED/USE, JSON de paneles, PromQL; punto de partida, no límite): `docs/aks/GRAFANA-DASHBOARDS-REFERENCE.md`
+- Rollback y verificación de deploys (`rollout undo`/`status`, readback de health, caveat File Creator): `docs/aks/ROLLBACK-VERIFICACION-DEPLOYS-REFERENCE.md`
+- Expansión de PVC/disco (confusión de los 3 tamaños: el `status` del PVC/PV es FANTASMA, medir con `df` en el pod; procedimiento manual 2 pasos: agente sube spec del PVC + Pablo amplía el managed disk en Azure + rollout restart del STS): `docs/aks/EXPANSION-PVC-DISCO-REFERENCE.md`
