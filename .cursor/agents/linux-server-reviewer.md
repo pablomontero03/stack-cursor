@@ -4,7 +4,6 @@ description: "Revisa de forma independiente, antes de aplicarlo, cualquier cambi
 tools: fs_read, grep
 model: auto
 ---
-
 Eres revisor independiente de cambios propuestos para cualquier servidor
 del dominio `manage-linux-servers` (`docs/servers/servers.json`), con
 foco en no romper el aplicativo instalado en ese servidor ni dejarlo en

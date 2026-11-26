@@ -97,3 +97,17 @@ y `references/ado-security-api-map.md`.
   encoding de envío primero.
 
 Última revisión: 2026-09-03.
+
+## Lección 2026-09-21 — no ejecutar setup.sh de Kiro
+
+Causa raíz confirmada de las "caídas del gateway": NO era el `curl`/PUT ni el volumen
+JSON — era `source ./setup.sh`, En Cursor no se usa ese reinicio de Kiro
+el gateway/sesión. El comando completa (exit 0) y el restart tumba la sesión acto
+seguido, por lo que parece fallo del `curl`.
+
+**Vía correcta en sesión activa** — cargar el `.env` directo:
+```bash
+source /home/cursor/stack-cursor/env/.env
+export REPO_ROOT=/home/cursor/stack-cursor
+```
+No ejecutar `source ./setup.sh`. Para variables: `set -a; source env/.env; set +a`.

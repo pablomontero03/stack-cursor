@@ -40,8 +40,8 @@ pida.
 
 ## Estado del MCP `azure`
 
-Diferido — ver `.claude/rules/azure/authorization.md` § Estado del MCP
-`azure`. `Test-AzureEnvironment.ps1` siempre reporta
+Diferido — ver `.cursor/rules/azure.mdc` (sección Estado del MCP
+`azure`). `Test-AzureEnvironment.ps1` siempre reporta
 `mcpAzure.configured = false` con una nota explicativa; no intentar
 conectar ni invocar ninguna tool `mcp__azure__*` mientras `.mcp.json` no
 lo declare.

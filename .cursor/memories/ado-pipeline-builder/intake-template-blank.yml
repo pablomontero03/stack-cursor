@@ -1,0 +1,115 @@
+# =============================================================================
+# PLANTILLA INTAKE - PIPELINE API AKS (BLANK)
+# =============================================================================
+# Instrucciones:
+# 1. Copiar este archivo
+# 2. Completar TODOS los campos marcados con <...>
+# 3. Adjuntar los 3 manifests K8s (deployment-dev/uat/prod.yml)
+# 4. Enviar al agente con el mensaje: "Crear pipeline con este intake"
+# 5. El agente ejecutará el flujo completo sin preguntas adicionales
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# PARTE 1: Información Básica de la API
+# -----------------------------------------------------------------------------
+aplicacion:
+  nombre: "<nombre-corto>"                      # Ej: auth-api, users-api, orders-api
+  sistema: "<sistema>"                          # Ej: Optica-Ecosystem, CRM, Analytics
+  descripcion: "<descripcion-breve>"            # Ej: API de autenticación
+  tecnologia: "<tecnologia>"                    # Ej: .NET 9.0, .NET 8.0, Node.js 20
+  puerto: 8080                                   # Puerto del contenedor (default 8080)
+
+# Repositorio
+repositorio:
+  organizacion: "Shared-Service-GM"
+  proyecto: "DevOps"
+  repo: "<repo-path>"                           # Ej: Dr.Max-Project/optica-ecosystem
+  carpeta_solucion: "<ruta-relativa>"           # Ej: src/Auth.API
+  archivo_proyecto: "<archivo.csproj>"          # Ej: Auth.API.csproj
+
+# Branches
+branches:
+  desarrollo: "develop"                          # Branch de desarrollo
+  uat: "uat"                                     # Branch de UAT
+  produccion: "release"                          # Branch de producción
+
+# Azure Container Registry (valores por defecto - normalmente no cambiar)
+acr:
+  nombre: "gmonhubacreastus20001"
+  registry_url: "gmonhubacreastus20001.azurecr.io"
+  password: "REDACTED"
+
+# Service Connections (valores por defecto - normalmente no cambiar)
+service_connections:
+  acr_id: "b6de83c1-c511-4b3f-b92b-ed8c3c3d1f0e"
+  acr_name: "SC-ACR-AZURE-GMON-DEV"
+
+# -----------------------------------------------------------------------------
+# PARTE 2: Configuración por Ambiente
+# -----------------------------------------------------------------------------
+ambientes:
+  desarrollo:
+    nombre: "Desarrollo"
+    namespace: "<namespace-dev>"                # Ej: optica-ecosystem-dev, crm-dev
+    cluster_context: "gmon-prod-aks-eastus2-0004"
+    replicas: 1
+    cpu_request: "100m"
+    cpu_limit: "500m"
+    memory_request: "128Mi"
+    memory_limit: "512Mi"
+    ingress_host: "<dominio-dev>"               # Ej: auth-api-dev.opticamontecristo.com
+    
+  uat:
+    nombre: "UAT"
+    namespace: "<namespace-uat>"                # Ej: optica-ecosystem-uat, crm-uat
+    cluster_context: "gmon-prod-aks-eastus2-0004"
+    replicas: 2
+    cpu_request: "200m"
+    cpu_limit: "1000m"
+    memory_request: "256Mi"
+    memory_limit: "1Gi"
+    ingress_host: "<dominio-uat>"               # Ej: auth-api-uat.opticamontecristo.com
+    
+  produccion:
+    nombre: "Produccion"
+    namespace: "<namespace-prod>"               # Ej: optica-ecosystem-prod, crm-prod
+    cluster_context: "gmon-prod-aks-eastus2-0001"
+    replicas: 3
+    cpu_request: "500m"
+    cpu_limit: "2000m"
+    memory_request: "512Mi"
+    memory_limit: "2Gi"
+    ingress_host: "<dominio-prod>"              # Ej: auth-api.opticamontecristo.com
+    # Approval (normalmente no cambiar)
+    approval:
+      enabled: true
+      approver_group: "Release Executers"
+      approver_id: "397ddbfe-1d60-4533-a4c9-b099f80ac154"
+
+# -----------------------------------------------------------------------------
+# PARTE 3: Manifests Kubernetes
+# -----------------------------------------------------------------------------
+# IMPORTANTE: Adjuntar 3 archivos:
+# - deployment-dev.yml
+# - deployment-uat.yml  
+# - deployment-prod.yml
+#
+# Usar como base los templates del Auth.API y ajustar:
+# - replicas (según ambiente arriba)
+# - resources.requests/limits (según ambiente arriba)
+# - ASPNETCORE_ENVIRONMENT (Development/Staging/Production)
+# - ingress.host (según dominio arriba)
+# - containerPort (según puerto arriba)
+# -----------------------------------------------------------------------------
+
+# =============================================================================
+# CHECKLIST PRE-ENVÍO (marcar con [x])
+# =============================================================================
+# [ ] Nombre, sistema, descripción completos
+# [ ] Repositorio: organización, proyecto, repo, carpeta y archivo correctos
+# [ ] Branches: nombres exactos (develop, uat, release)
+# [ ] Namespaces: uno por ambiente (dev, uat, prod)
+# [ ] Ingress hosts: dominios correctos por ambiente
+# [ ] 3 manifests K8s adjuntos (deployment-dev/uat/prod.yml)
+# [ ] Manifests validados localmente (kubectl apply --dry-run)
+# =============================================================================

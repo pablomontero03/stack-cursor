@@ -3,7 +3,7 @@ Wrapper CLI de solo lectura para monitorear un Build o Release clasico ya
 iniciado: consulta inmediatamente y luego cada -IntervalSeconds hasta un
 estado terminal o -TimeoutMinutes. Nunca escribe nada -- son GETs, forman
 parte del plan aprobado y no requieren aprobacion adicional (ver
-.kiro/rules/azure-devops-pipelines/authorization.md).
+.cursor/rules/azure-devops.mdc).
 
 Usado tambien por orchestrate-application-pipeline-cycle para el
 monitoreo activo de Build/Release exigido por

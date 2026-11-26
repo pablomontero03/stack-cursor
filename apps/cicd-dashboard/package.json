@@ -1,0 +1,17 @@
+{
+  "name": "cicd-dashboard",
+  "version": "1.2.0",
+  "description": "Dashboard CI/CD (builds + releases de Azure DevOps) con notificaciones a Teams. Grupo Montecristo.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "private": true
+}

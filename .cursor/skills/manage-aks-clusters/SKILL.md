@@ -1,6 +1,6 @@
 ---
 name: manage-aks-clusters
-description: "Administra, diagnostica y opera clusteres AKS/Kubernetes/Helm mediante kubectl, Helm y Azure CLI para pods, deployments, servicios, ingress, namespaces, node pools, autoscaling, RBAC y Secrets. Triggers: aks, kubernetes, kubectl, helm, cluster, namespace, pod, deployment, ingress."
+description: Administra, diagnostica y opera clusteres AKS/Kubernetes/Helm mediante kubectl, Helm y Azure CLI para pods, deployments, servicios, ingress, namespaces, node pools, autoscaling, RBAC y Secrets.
 triggers: [aks, kubernetes, kubectl, helm, cluster, namespace, pod, deployment, ingress]
 always: false
 ---
@@ -19,7 +19,7 @@ Toda base de datos SQL sigue siendo de solo lectura para todo el proyecto
 indirectamente. Dentro de AKS: lectura/inventario/diagnóstico/simulación
 son automáticos; toda escritura real o eliminación exige aprobación
 explícita; nada queda prohibido de forma permanente salvo lo listado en
-`.kiro/steering/aks/security.md` § Prohibido permanentemente — un comando o
+`.cursor/rules/aks/security.md` § Prohibido permanentemente — un comando o
 tool MCP no reconocido siempre resuelve a "preguntar", nunca a "denegar".
 
 ## Cargar solamente el contexto necesario
@@ -90,12 +90,12 @@ usuario — referenciarlas por ruta.
 aplicación), `tools/` (binario del MCP), `logs/`. `cluster/` (en la raíz
 del repo) es distinto: manifiestos Kubernetes **sanitizados y
 versionables** — nunca kubeconfigs, secretos reales ni respaldos de
-producción (ver `.kiro/steering/aks/security.md`).
+producción (ver `.cursor/rules/aks/security.md`).
 
 ## Fuentes de verdad de este dominio
 
-- Autorización y seguridad: `.kiro/steering/aks/authorization.md` y
-  `.kiro/steering/aks/security.md`.
+- Autorización y seguridad: `.cursor/rules/aks/authorization.md` y
+  `.cursor/rules/aks/security.md`.
 - Arquitectura completa: `docs/aks/AKS-AUTOMATION-ARCHITECTURE.md`.
 - MCP: `references/aks-mcp.md` (versión, hash, flags, tools reales
   confirmadas tras el reload de sesión).

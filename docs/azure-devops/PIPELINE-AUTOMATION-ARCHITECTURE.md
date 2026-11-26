@@ -11,10 +11,10 @@ vive en la skill, no acá.
 |-----|-------|
 | Procedimiento operativo, modos, enrutamiento | `.claude/skills/manage-azure-devops-pipelines/SKILL.md` |
 | Guías originales de la organización (alta desde cero, playbook genérico, caso Buklo) | `.claude/skills/manage-azure-devops-pipelines/references/` |
-| Mapa de endpoints REST para brechas clásicas | `.claude/skills/manage-azure-devops-pipelines/references/ado-api-map.md` |
-| Matriz de aprobación | `.claude/skills/manage-azure-devops-pipelines/references/approval-matrix.md` |
-| Autorización detallada | `.claude/rules/azure-devops-pipelines/authorization.md` |
-| Seguridad detallada (PAT, secretos, MCP vs REST) | `.claude/rules/azure-devops-pipelines/security.md` |
+| Mapa de endpoints REST para brechas clásicas | `.cursor/skills/manage-azure-devops-pipelines/references/ado-api-map.md` |
+| Matriz de aprobación | `.cursor/skills/manage-azure-devops-pipelines/references/approval-matrix.md` |
+| Autorización detallada | `.cursor/rules/azure-devops.mdc` |
+| Seguridad detallada (PAT, secretos, MCP vs REST) | `.cursor/rules/azure-devops.mdc` |
 | Instrucciones originales de esta incorporación | `docs/azure-devops/INSTRUCCIONES-CLAUDE-AZURE-DEVOPS-PIPELINES.md` |
 
 ## Decisión técnica: MCP oficial primero, REST controlado para brechas clásicas
@@ -90,7 +90,7 @@ su propia aprobación separada (ver `authorization.md`).
 | `ado-pipeline-reviewer` | Revisión independiente de un plan antes de aplicarlo (`Apply-AdoClassicPlan.ps1`) | `Read, Grep, Glob` — nunca modifica ni aplica |
 
 Los tres tienen `memory: project` con carpeta propia bajo
-`.claude/agent-memory/`, según `.claude/rules/agent-memory.md`.
+`.cursor/memories/`, según el steering del dominio.
 
 ## Estado a la fecha de esta incorporación
 

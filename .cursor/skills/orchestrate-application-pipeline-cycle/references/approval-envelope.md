@@ -7,7 +7,7 @@
    las instrucciones del refactor.
 2. Corrección (2026-09-08, durante la primera corrida real de
    `app-sso`): se encontró que eso contradecía una regla más estricta y
-   preexistente en `.claude/rules/azure-devops-pipelines/authorization.md`
+   preexistente en `.cursor/rules/azure-devops.mdc`
    ("Encolar el primer Build"/"crear una instancia de Release real"
    como aprobaciones siempre separadas) — se separó en Aprobación 1
    (solo definiciones) + Aprobación 1B (ejecución, por ambiente).
@@ -65,7 +65,7 @@ de código con nombre distinto dentro del plan aprobado por
 |---|---|---|
 | Azure DevOps Pipelines | ```ado-apply-authorization``` | `ado-preparation-permission.ps1` / `ado-permission-common.ps1` |
 | Cloudflare | ```cloudflare-apply-authorization``` / ```cloudflare-delete-authorization``` | `cloudflare-plan-authorization.ps1` / `cloudflare-permission-common.ps1` |
-| AKS | Sin bloque visible — tarjeta nativa por nombre de `Apply-AksChangePlan.ps1` (ver `.claude/rules/aks/authorization.md`) | Permiso nativo de la herramienta |
+| AKS | Sin bloque visible — tarjeta nativa por nombre de `Apply-AksChangePlan.ps1` (ver `.cursor/rules/aks.mdc`) | Permiso nativo de la herramienta |
 
 Cada hook busca **su propio** nombre de bloque, sin exigir que sea el
 único bloque presente en el texto del plan (confirmado leyendo
@@ -167,7 +167,7 @@ listado; un reintento tras `blocked-drift`/`ambiguous` (requiere
 replanificar, no es un simple reintento dentro de la envolvente); la
 familia contraria (AKS ↔ DACPAC en Azure DevOps); ejecutar Desarrollo o
 UAT si el plan no lo enumeró explícitamente como parte de esta operación
-(ver distinción en `.claude/rules/azure-devops-pipelines/authorization.md`
+(ver distinción en `.cursor/rules/azure-devops.mdc`
 § Terminología); ninguna eliminación; **Producción, siempre, sin
 excepción**.
 

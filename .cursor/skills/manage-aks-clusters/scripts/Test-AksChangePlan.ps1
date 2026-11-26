@@ -21,7 +21,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Aks-Common.ps1')
-. (Join-Path (Get-AksProjectRoot) '.kiro\hooks\aks\aks-secret-scan-lib.ps1')
+. (Join-Path (Get-AksProjectRoot) '.kiro' 'hooks' 'aks' 'aks-secret-scan-lib.ps1')
 
 $blockers = [System.Collections.Generic.List[string]]::new()
 

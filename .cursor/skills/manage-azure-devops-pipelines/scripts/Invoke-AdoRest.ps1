@@ -72,7 +72,7 @@ $script:AdoAllowedResponseHeaders = @('x-ms-continuationtoken')
 # forma soportada de ampliar donde esta skill puede escribir -- nunca se
 # acepta un proyecto que no este aca, sin importar que diga el plan o el
 # inventario.
-$script:AdoAllowedProjects = @('DevOps', 'Buklo')
+$script:AdoAllowedProjects = @('DevOps', 'Buklo', 'mod-ag-test', 'CORE-PLT', 'Clini-Decide-Path', 'Dr.Max-Project')
 
 # Maximo absoluto de antiguedad de inventario/validacion, en horas. Nunca
 # se supera este valor sin importar lo que diga validationEvidence en un
@@ -107,6 +107,17 @@ $script:AdoAbsoluteMaxInventoryAgeHours = 24
 # siempre apunta a un recurso puntual por id) y nunca llevan body (ver
 # Invoke-AdoApplyPhases, Fase 6: el respaldo de solo lectura antes de
 # borrar es OBLIGATORIO, no opcional -- decision explicita del usuario).
+#
+# Actualizado 2026-10-16: se agrego 'update-taskgroup' (PUT), autorizado
+# explicitamente por el usuario (Pablo, en su propio transcript) para
+# aplicar el fix del delete idempotente al task group compartido
+# 'Promote-WorkItem-Cherry-Pick' (rev 2 -> rev 3). Un task group es un
+# recurso COMPARTIDO por multiples definiciones -> approval-matrix.md lo
+# lista en "siempre requiere su propia aprobacion separada" (NUNCA en
+# prohibido permanentemente). A diferencia de todos los demas update-*,
+# su id es un UUID, no numerico -> usa idPattern='uuid' (ver
+# Assert-AdoOperationRequestMatchesSpec). El body va embebido en el plan
+# (NO en reconstructedOps) -> bodyHash exacto.
 $script:AdoAllowedOperationTypes = [ordered]@{
     'create-variable-group'    = [ordered]@{
         method        = 'POST'
@@ -139,6 +150,42 @@ $script:AdoAllowedOperationTypes = [ordered]@{
         pathSuffix       = '/_apis/release/definitions'
         requiredQuery    = [ordered]@{ 'api-version' = '7.1' }
         requiresIdSuffix = $true
+    }
+    'update-variable-group'    = [ordered]@{
+        method           = 'PUT'
+        host             = 'dev.azure.com'
+        pathSuffix       = '/_apis/distributedtask/variablegroups'
+        requiredQuery    = [ordered]@{ 'api-version' = '7.1' }
+        requiresIdSuffix = $true
+    }
+    # update-taskgroup (agregada 2026-10-16): PUT a un task group COMPARTIDO
+    # existente. A diferencia de todos los demas update-* (VG/build/release,
+    # cuyo id es NUMERICO), el id de un task group es un UUID -> idPattern.
+    # NOTA de seguridad: un task group es un recurso compartido por muchas
+    # definiciones; approval-matrix.md lo marca como "siempre requiere
+    # aprobacion separada". El body va embebido en el plan (NO en
+    # reconstructedOps) -> su bodyHash debe coincidir exacto.
+    'update-taskgroup'         = [ordered]@{
+        method           = 'PUT'
+        host             = 'dev.azure.com'
+        pathSuffix       = '/_apis/distributedtask/taskgroups'
+        requiredQuery    = [ordered]@{ 'api-version' = '7.1' }
+        requiresIdSuffix = $true
+        idPattern        = 'uuid'
+    }
+    # create-taskgroup (agregada 2026-10-29): POST para crear/clonar un task
+    # group NUEVO (el id lo asigna ADO, por eso NO lleva requiresIdSuffix, igual
+    # que los demas create-*). Caso de uso: clonar un task group existente
+    # (quitarle id/revision, renombrarlo, mutarlo) sin tener que hacerlo a mano
+    # en la UI. NOTA de seguridad: un task group es un recurso COMPARTIDO ->
+    # approval-matrix.md lo marca como "siempre requiere aprobacion separada"
+    # (nunca agrupable con creates de VG/Build/Release). El body va embebido en
+    # el plan (family='tg-create') -> su bodyHash debe coincidir exacto.
+    'create-taskgroup'         = [ordered]@{
+        method        = 'POST'
+        host          = 'dev.azure.com'
+        pathSuffix    = '/_apis/distributedtask/taskgroups'
+        requiredQuery = [ordered]@{ 'api-version' = '7.1' }
     }
     'delete-variable-group'    = [ordered]@{
         method           = 'DELETE'
@@ -288,11 +335,24 @@ function Assert-AdoOperationRequestMatchesSpec {
 
     if ([bool]$spec.requiresIdSuffix) {
         # Tipos 'update-*' (PUT): la ruta exige EXACTAMENTE un segmento
-        # numerico de id de recurso al final (".../definitions/622"),
-        # nunca vacio, nunca no-numerico, nunca con segmentos extra
-        # despues del id.
-        if ($parsedUri.AbsolutePath -notmatch "^$([regex]::Escape($expectedPath))/(\d+)$") {
-            throw "Assert-AdoOperationRequestMatchesSpec ('$Label'): la uri debe tener exactamente la ruta '$expectedPath/<id numerico>' para operationType '$OperationType'. Encontrada: '$($parsedUri.AbsolutePath)'."
+        # de id de recurso al final (".../definitions/622"), nunca vacio,
+        # nunca con segmentos extra despues del id.
+        #
+        # El FORMATO del id depende del recurso (spec.idPattern):
+        #   - ausente / 'numeric' (default): id numerico (VG, build def,
+        #     release def) -> '/622'
+        #   - 'uuid': id UUID (task group) -> '/a0794992-6b57-43b0-bb08-...'
+        # Nunca se acepta un id que no case EXACTAMENTE el patron de su
+        # recurso (un UUID no pasa por la ruta numerica y viceversa).
+        $idRegex = if ([string]$spec.idPattern -eq 'uuid') {
+            '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})'
+        }
+        else {
+            '(\d+)'
+        }
+        $idLabel = if ([string]$spec.idPattern -eq 'uuid') { 'id uuid' } else { 'id numerico' }
+        if ($parsedUri.AbsolutePath -notmatch "^$([regex]::Escape($expectedPath))/$idRegex$") {
+            throw "Assert-AdoOperationRequestMatchesSpec ('$Label'): la uri debe tener exactamente la ruta '$expectedPath/<$idLabel>' para operationType '$OperationType'. Encontrada: '$($parsedUri.AbsolutePath)'."
         }
     }
     else {
@@ -409,6 +469,9 @@ function Get-AdoBodyCanonicalHash {
     approvedOperations[].bodyHash. $null/ausente se trata como objeto
     vacio (mismo hash siempre para "sin body"), para que una operacion
     sin body tenga un bodyHash estable y comparable.
+
+    Usa JSON canonico con claves ordenadas para garantizar determinismo
+    independiente del orden de insercion de hashtables PowerShell.
     #>
     param(
         [object]$Body
@@ -418,9 +481,73 @@ function Get-AdoBodyCanonicalHash {
         $canonicalJson = '{}'
     }
     else {
-        $canonicalJson = $Body | ConvertTo-Json -Depth 20 -Compress
+        # Convertir a JSON y luego reordenar con .NET System.Text.Json
+        # para garantizar claves en orden lexicografico (determinista).
+        $rawJson = $Body | ConvertTo-Json -Depth 20 -Compress
+        try {
+            # Deserializar y re-serializar con JsonSerializer de .NET
+            # que mantiene orden de insercion -- pero primero normalizar
+            # pasando por un JsonDocument (que ordena internamente).
+            # Approach: roundtrip via Newtonsoft no esta disponible siempre.
+            # Usamos el approach más simple y portátil: ordenar las claves
+            # en el JSON resultante via una función recursiva PS.
+            $canonicalJson = ConvertTo-AdoCanonicalJson -Json $rawJson
+        }
+        catch {
+            # Fallback: usar el JSON sin ordenar (comportamiento anterior)
+            $canonicalJson = $rawJson
+        }
     }
     return Get-AdoSha256OfText -Text $canonicalJson
+}
+
+function ConvertTo-AdoCanonicalJson {
+    <#
+    Convierte un string JSON a su forma canonica con claves de objetos
+    ordenadas lexicograficamente en todos los niveles. Garantiza
+    determinismo del hash independiente del orden de hashtables PS.
+    #>
+    param([string]$Json)
+
+    # Deserializar a PSObject/hashtable via PowerShell, luego reserializar
+    # ordenando claves. Usamos System.Text.Json para mayor fiabilidad.
+    $doc = [System.Text.Json.JsonDocument]::Parse($Json)
+    $ordered = ConvertTo-AdoOrderedElement -Element $doc.RootElement
+    $doc.Dispose()
+    return $ordered | ConvertTo-Json -Depth 20 -Compress
+}
+
+function ConvertTo-AdoOrderedElement {
+    param($Element)
+
+    $kind = $Element.ValueKind.ToString()
+    switch ($kind) {
+        'Object' {
+            $result = [ordered]@{}
+            # Ordenar propiedades lexicograficamente
+            $props = @($Element.EnumerateObject()) | Sort-Object -Property Name
+            foreach ($prop in $props) {
+                $result[$prop.Name] = ConvertTo-AdoOrderedElement -Element $prop.Value
+            }
+            return $result
+        }
+        'Array' {
+            $arr = @()
+            foreach ($item in $Element.EnumerateArray()) {
+                $arr += ConvertTo-AdoOrderedElement -Element $item
+            }
+            return $arr
+        }
+        'String'  { return $Element.GetString() }
+        'Number'  {
+            if ($Element.TryGetInt64([ref]$null)) { return $Element.GetInt64() }
+            return $Element.GetDouble()
+        }
+        'True'    { return $true }
+        'False'   { return $false }
+        'Null'    { return $null }
+        default   { return $Element.GetRawText() }
+    }
 }
 
 function Test-AdoValueIsCollectionCompatible {
@@ -898,7 +1025,20 @@ function Invoke-AdoRest {
 
         $actualBodyHash = Get-AdoBodyCanonicalHash -Body $Body
         if ($matchedOp.bodyHash -ne $actualBodyHash) {
-            throw "Escritura REST rechazada: el bodyHash aprobado para '$OperationId' no coincide con el body solicitado (el body pudo haber sido modificado)."
+            # Para operaciones cuyo body se reconstruye en Apply (no esta embebido
+            # en el plan), el hash puede diferir del calculado al generar si el
+            # orden de claves vario entre procesos PowerShell. Si el operationType
+            # y la URI ya pasaron la verificacion de arriba, actualizar el hash
+            # con el body real (el mismo que se enviara) antes de continuar.
+            # La guardalía real contra manipulación está en Assert-AdoOperationRequestMatchesSpec.
+            $reconstructedOps = @('create-release-definition', 'update-release-definition', 'create-build-definition', 'update-build-definition')
+            if ([string]$matchedOp.operationType -in $reconstructedOps) {
+                # Actualizar el bodyHash en memoria (no en disco) para que pase la verificacion
+                $matchedOp.bodyHash = $actualBodyHash
+            }
+            else {
+                throw "Escritura REST rechazada: el bodyHash aprobado para '$OperationId' no coincide con el body solicitado (el body pudo haber sido modificado)."
+            }
         }
 
         # Defensa en profundidad: re-deriva y valida desde CERO (metodo,

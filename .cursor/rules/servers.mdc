@@ -21,8 +21,15 @@ Nunca asumir que las IPs, usuarios o rutas están vigentes — confirmar contra 
 | srv-127 | `172.16.2.127` | administrator | — |
 | ADO admin | `10.1.0.200` | adoadmin | Azure DevOps on-prem |
 | OpenEdX | `135.119.204.153` | adminedx | OpenEdX (clave `.pem`) |
+| OpenEdX DEV | `10.2.1.132` (sin IP pública) | adminedx | OpenEdX **DESARROLLO** (`vm-openEdx-dev`, RG `OPENEDX-DESARROLLO`, clave `env/keyopenedx-dev.pem`) |
+| IA NVIDIA #1 (spark-8bac) | `172.16.2.61` | tidesarrollo | Servidor IA NVIDIA DGX Spark (GPU GB10, ARM64) |
+| IA NVIDIA #2 (spark-0a57) | `172.16.2.63` | tidesarrollo | Servidor IA NVIDIA DGX Spark (GPU GB10, ARM64) |
+| eprac (crsrvapipampa01) | `172.16.2.95` | eprac | Host Docker eIntegra Core — PRD `:8090` + QA `:8080` (Ubuntu 24.04) |
+
+> **No confundir (incidente 2026-11-12):** `135.119.204.153` es PRODUCCIÓN (`vm-openEdx`, RG `OPENEDX`, priv `10.0.0.6`); `vm-openEdx-dev` NO tiene IP pública y solo se alcanza por `10.2.1.132`. Si Azure no devuelve IP pública para una VM, detenerse: no reutilizar una IP de memoria. Antes de operar, verificar `hostname -I` / `az vm list -d` contra la VM objetivo. Llaves distintas: prod `keyopenedx.pem`, dev `keyopenedx-dev.pem`.
 
 Credenciales en `$REPO_ROOT/env/.env`. Las claves SSH en `$REPO_ROOT/env/` (no versionadas).
+Para estos hosts las variables son: `172.16.2.60` `N8N_SRV_*`, `172.16.2.61` `NVIDIA_SPARK_61_*`, `172.16.2.63` `NVIDIA_SPARK_63_*`, `172.16.2.95` `EPRAC_95_*`, `172.16.2.76` `CRSRVSISRDP_76_*`.
 
 ## Operaciones
 
@@ -30,6 +37,25 @@ Credenciales en `$REPO_ROOT/env/.env`. Las claves SSH en `$REPO_ROOT/env/` (no v
 - Los agentes `windows-server-diagnoser` y `windows-server-reviewer` igual.
 - Para ejecutar comandos en servidores: el agente pide aprobación y el usuario los corre manualmente, o se usa SSH via `execute_bash` con aprobación explícita.
 
+### SSH Directo via Wrapper (nuevo 2026-11-11)
+
+El wrapper `scripts/servers/Invoke-ServerCommand.ps1` permite ejecución SSH directa con whitelist de comandos:
+
+```powershell
+# Ejemplo: diagnóstico read-only
+pwsh scripts/servers/Invoke-ServerCommand.ps1 -ServerName "SRV-SFTP-TS" -Command "docker ps"
+
+# Ejemplo: comando controlado (requiere -Force tras aprobación)
+pwsh scripts/servers/Invoke-ServerCommand.ps1 -ServerName "SRV-SFTP-TS" -Command "docker restart n8n" -Force
+```
+
+**Niveles de la whitelist** (`docs/servers/allowed-commands.json`):
+- `read_only`: diagnóstico sin efectos — aprobación en batch
+- `controlled`: comandos con efectos (restart, stop) — aprobación individual
+- `prohibited`: destructivos (rm -rf, shutdown) — **nunca permitidos**
+
 ## Fuentes de verdad
 
 - Skills: `.cursor/skills/manage-linux-servers/SKILL.md`, `.cursor/skills/manage-windows-servers/SKILL.md`
+- Whitelist SSH: `docs/servers/allowed-commands.json`
+- Wrapper SSH: `scripts/servers/Invoke-ServerCommand.ps1`

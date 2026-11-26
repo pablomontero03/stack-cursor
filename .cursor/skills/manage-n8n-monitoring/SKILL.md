@@ -1,11 +1,19 @@
 ---
 name: manage-n8n-monitoring
-description: "Opera, diagnostica y clona workflows n8n de monitoreo SQL y ajusta timeouts del workflow de IA AIA-CC-MAIA-Chat en las instancias internas de n8n. Triggers: n8n, workflow, monitoreo sql, maia, automatizacion, clonar, schedule."
+description: Opera, diagnostica y clona workflows n8n de monitoreo SQL y ajusta timeouts del workflow de IA AIA-CC-MAIA-Chat en las instancias internas de n8n.
 triggers: [n8n, workflow, monitoreo sql, maia, automatizacion, clonar, schedule]
 always: false
 ---
 
 # Manage n8n Monitoring
+
+> **Estado de madurez (Fase 3 — declarado 2026-09-11):** este dominio opera
+> como **guía de operación vía MCP**, no como dominio con maquinaria
+> plan/apply/test automatizada propia. Las escrituras (crear, modificar, clonar
+> workflows) van por el MCP de n8n correspondiente bajo el modelo de aprobaciones
+> del stack. No tiene `Apply-*.ps1` propios porque el MCP ya es la capa de
+> aplicación. Para ampliar a tests offline o maquinaria propia, seguir el patrón
+> de los dominios maduros. Esta decisión es intencional.
 
 ## Cargar solamente el contexto necesario
 

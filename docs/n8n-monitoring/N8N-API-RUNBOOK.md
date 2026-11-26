@@ -45,26 +45,26 @@ URL y el token van literales en la config).
 
 **La config vive en 4 archivos — corregir uno solo NO basta:**
 
-- `<repo>/.kiro/settings/mcp.json` (proyecto)
-- `~/.kiro/settings/mcp.json` (global de kiro-cli)
-- `~/.kiro/agents/kirocrew.json` (agente del dashboard — tiene la ruta en 2 lugares: `url` y `args --streamableHttp`)
-- `~/.kiro/crew/mcp.json` (KiroCrew)
+- `<repo>/.cursor/mcp.json` (proyecto)
+- `~/.cursor/mcp.json` (config del worker)
+- `/home/cursor/stack-cursor/.cursor/mcp.json` (agente del dashboard — tiene la ruta en 2 lugares: `url` y `args --streamableHttp`)
+- `/home/cursor/stack-cursor/.cursor/mcp.json` (KiroCrew)
 
 Si el servidor falló repetidamente puede quedar en cuarentena en
-`~/.kiro/crew/mcp-quarantine.json`; un `kirocrew restart` tras el fix lo
+`/home/cursor/stack-cursor/.cursor/mcp.json`; un reinicio del worker gmon-hub tras el fix lo
 reintenta.
 
 **Pasos para dejarlo funcionando:**
 
 1. Corregir ruta + token en los 4 archivos.
-2. `kirocrew restart` (recarga las configs y reintenta la cuarentena).
+2. reiniciar el worker gmon-hub para recargar `.cursor/mcp.json`.
 3. Abrir una **sesión nueva** del dashboard — la lista de tools se fija al
    crear la sesión y no se recarga desde adentro.
 
 **Diagnóstico útil** (expone el estado de carga por servidor MCP):
 
 ```bash
-kiro-cli chat --no-interactive --trust-all-tools -vvv "di READY" 2>&1 \
+el worker gmon-hub carga `.cursor/mcp.json` 2>&1 \
   | grep -iE "mcpServerName|InitFailureReason|toolsPerMcpServer"
 ```
 
@@ -82,7 +82,7 @@ kiro-cli chat --no-interactive --trust-all-tools -vvv "di READY" 2>&1 \
 
 Síntoma: con `n8n-productivo` configurado vía `supergateway --streamableHttp`
 (`type: stdio`), la sesión no expone tools `n8n-productivo::*`. La telemetría
-de kiro-cli muestra `Failed to open SSE stream: Not Found`.
+el cliente MCP puede mostrar `Failed to open SSE stream: Not Found`.
 
 **Causa raíz (verificada 2026-09-09) — es el TRANSPORTE, no la versión ni la
 config:**
@@ -123,12 +123,12 @@ monitoreo SQL, AKS) aunque se pidió el de productivo — o al revés.
 
 **Causa:** `n8n-interno` y `n8n-productivo` exponen tools con nombres
 IDÉNTICOS (`search_workflows`, `execute_workflow`, `get_workflow_details`).
-kiro-cli las colisiona y solo deja una invocable bajo ese nombre (la del
+si dos tools se llaman igual, el cliente puede dejar solo una invocable bajo ese nombre (la del
 interno, con 34 tools). Ambos servidores cargan bien (`fail=""`, 34 y 3
 tools), pero el modelo ve un solo `search_workflows`.
 
 **Fix (aplicado 2026-09-09) — `toolAliases` en el agente:** en
-`~/.kiro/agents/kirocrew.json`, remapear las tools de productivo a nombres
+`/home/cursor/stack-cursor/.cursor/mcp.json`, remapear las tools de productivo a nombres
 únicos:
 
 ```json
@@ -139,7 +139,7 @@ tools), pero el modelo ve un solo `search_workflows`.
 }
 ```
 
-Requiere `kirocrew restart` + sesión nueva. Tras esto: `prod_search_workflows`
+Requiere reiniciar el worker gmon-hub y abrir un chat nuevo. Tras esto: `prod_search_workflows`
 = productivo (negocio/MAIA), `search_workflows` = interno.
 
 **Verificar SIEMPRE por contenido antes de reportar** cuál instancia

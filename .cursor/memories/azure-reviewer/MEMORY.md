@@ -22,7 +22,18 @@ clasificación de riesgo confirmadas.
 ## Aprendizajes esenciales
 
 Ninguno todavía — este agente se implementó el 2026-09-03 y no tiene
-revisiones reales previas. Ver `.claude/rules/azure/authorization.md` y
-`security.md` para las reglas vigentes (no se duplican aquí).
+revisiones reales previas. Ver `.cursor/rules/azure.mdc` para las reglas vigentes (no se duplican aquí).
 
 Última revisión: 2026-09-03 (creación inicial).
+
+## Regla operacional: no ejecutar setup.sh de Kiro
+Confirmado en producción 2026-09-21. No ejecutar `setup-kiro.sh`. `./setup-cursor.sh` no reinicia el worker.
+
+**Siempre usar en sesiones activas de Crew:**
+```bash
+set -a; source /home/cursor/stack-cursor/env/.env; set +a
+export REPO_ROOT=/home/cursor/stack-cursor
+```
+O con el flag seguro: `set -a; source env/.env; set +a`
+
+No ejecutar `source ./setup.sh`. Para variables: `set -a; source env/.env; set +a`.

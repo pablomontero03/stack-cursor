@@ -1,6 +1,6 @@
 # Modelo de aprobación — resumen operativo
 
-Fuente de verdad completa: `.claude/rules/azure-devops-permissions/authorization.md`.
+Fuente de verdad completa: `.cursor/rules/azure-devops.mdc` (sección de permisos).
 Este archivo es un resumen para consulta rápida durante el flujo, no la
 reemplaza.
 

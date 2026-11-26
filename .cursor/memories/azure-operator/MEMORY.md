@@ -27,8 +27,20 @@ frecuentes al planificar cambios.
 
 Ninguno todavía — este agente se implementó el 2026-09-03 y no tiene
 ejecuciones reales previas (el dominio se construyó con el MCP `azure`
-diferido a propósito, ver `.claude/rules/azure/authorization.md`). Ver
-esa regla y `.claude/rules/azure/security.md` para las reglas vigentes (no
+diferido a propósito, ver `.cursor/rules/azure.mdc`). Ver
+esa regla para las reglas vigentes (no
 se duplican aquí).
 
 Última revisión: 2026-09-03 (creación inicial).
+
+## Regla operacional: no ejecutar setup.sh de Kiro
+Confirmado en producción 2026-09-21. No ejecutar `setup-kiro.sh`. `./setup-cursor.sh` no reinicia el worker.
+
+**Siempre usar en sesiones activas de Crew:**
+```bash
+set -a; source /home/cursor/stack-cursor/env/.env; set +a
+export REPO_ROOT=/home/cursor/stack-cursor
+```
+O con el flag seguro: `set -a; source env/.env; set +a`
+
+No ejecutar `source ./setup.sh`. Para variables: `set -a; source env/.env; set +a`.

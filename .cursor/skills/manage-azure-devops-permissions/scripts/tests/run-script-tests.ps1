@@ -1,4 +1,4 @@
-﻿<#
+<#
 Arnes de pruebas offline (sin Pester, sin red real) para los scripts de
 manage-azure-devops-permissions. Cubre los 26 casos obligatorios del
 documento fuente. Nunca usa la organizacion real ni un PAT real -- los
@@ -91,7 +91,7 @@ function Invoke-ChildScript {
     $errFile = Join-Path $tmpRoot "child-err-$id.txt"
 
     $allArgs = @('-NoProfile', '-NonInteractive', '-File', $FilePath) + $ArgumentList
-    $proc = Start-Process -FilePath 'powershell.exe' -ArgumentList $allArgs -RedirectStandardOutput $outFile -RedirectStandardError $errFile -NoNewWindow -Wait -PassThru
+    $proc = Start-Process -FilePath 'pwsh' -ArgumentList $allArgs -RedirectStandardOutput $outFile -RedirectStandardError $errFile -NoNewWindow -Wait -PassThru
 
     $stdout = ''
     $stderr = ''
@@ -304,6 +304,25 @@ if (Test-Path (Join-Path $tmpRoot 'plan6.json')) {
 else { Add-Result -Name '6. Membresia aditiva: solo agrega al nuevo, conserva el existente' -Passed $false -Detail $r.Stderr }
 
 # ============================================================
+# 6b: guard de membresia extrae descriptores desde URI cuando
+#     precondition.memberDescriptor / containerDescriptor estan vacios.
+#     Regresion: bug corregido 2026-09-17 -- el plan generado tenia los
+#     descriptores en la URI pero los campos de precondition vacios,
+#     lo que causaba checkUri vacio -> HTTP 400 -> driftDetected=true
+#     -> Apply rechazado silenciosamente.
+# ============================================================
+. (Join-Path $scriptsDir 'Invoke-AdoPermissionsRest.ps1')
+$testUri6b = 'https://vssps.dev.azure.com/Shared-Service-GM/_apis/graph/memberships/aad.MEMBER_DESC/vssgp.CONTAINER_DESC?api-version=7.1-preview.1'
+$memberD6b = ''; $containerD6b = ''
+if ($testUri6b -match '/graph/memberships/([^/\?]+)/([^/\?]+)') {
+    $memberD6b    = [uri]::UnescapeDataString($Matches[1])
+    $containerD6b = [uri]::UnescapeDataString($Matches[2])
+}
+Add-Result -Name '6b. Guard membresia: extrae memberDescriptor desde URI cuando precondition esta vacio' `
+    -Passed ($memberD6b -eq 'aad.MEMBER_DESC' -and $containerD6b -eq 'vssgp.CONTAINER_DESC') `
+    -Detail "memberDesc='$memberD6b' containerDesc='$containerD6b'"
+
+# ============================================================
 # 7: identidad ambigua (sin descriptor resuelto) bloquea el plan.
 # ============================================================
 $inv7 = New-FixtureInventory
@@ -321,18 +340,18 @@ $matrix = Get-AdoPermissionsMatrixDefinition
 $expectedAllRepos = @{
     'Advanced Security: manage and dismiss alerts' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
     'Advanced Security: manage settings' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
-    'Advanced Security: view alerts' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
+    'Advanced Security: view alerts' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Allow' }
     'Bypass policies when completing pull requests' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
     'Bypass policies when pushing' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
-    'Contribute' = @{DevelopmentTeam = 'Allow'; CodeReviewers = 'Allow' }
-    'Contribute to pull requests' = @{DevelopmentTeam = 'Allow'; CodeReviewers = 'Allow' }
-    'Create branch' = @{DevelopmentTeam = 'Allow'; CodeReviewers = 'Allow' }
+    'Contribute' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Allow' }
+    'Contribute to pull requests' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Allow' }
+    'Create branch' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Allow' }
     'Create repository' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
-    'Create tag' = @{DevelopmentTeam = 'Allow'; CodeReviewers = 'Not set' }
+    'Create tag' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Allow' }
     'Delete or disable repository' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
     'Edit policies' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
     'Force push (rewrite history, delete branches and tags)' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
-    'Manage notes' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
+    'Manage notes' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Allow' }
     'Manage permissions' = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
     'Read' = @{DevelopmentTeam = 'Allow'; CodeReviewers = 'Allow' }
     "Remove others' locks" = @{DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
@@ -354,7 +373,7 @@ Add-Result -Name '8. Matriz All Repositories coincide exacto con la instruccion'
 # completar PRs ahi) -- se agrega CrContribute a la comparacion para
 # cubrir este segundo cambio, que test 9 antes no verificaba en absoluto.
 $expectedBranch = @{
-    feature     = @{ Contribute = 'Not set'; CrContribute = 'Not set'; RemoveLocksDev = 'Not set'; RemoveLocksCr = 'Not set' }
+    feature     = @{ Contribute = 'Allow'; CrContribute = 'Not set'; RemoveLocksDev = 'Not set'; RemoveLocksCr = 'Not set' }
     development = @{ Contribute = 'Deny'; CrContribute = 'Not set'; RemoveLocksDev = 'Not set'; RemoveLocksCr = 'Not set' }
     uat         = @{ Contribute = 'Deny'; CrContribute = 'Not set'; RemoveLocksDev = 'Not set'; RemoveLocksCr = 'Not set' }
     release     = @{ Contribute = 'Deny'; CrContribute = 'Not set'; RemoveLocksDev = 'Not set'; RemoveLocksCr = 'Not set' }
@@ -593,7 +612,7 @@ if (Test-Path -LiteralPath $GateScript) {
     Set-Content -LiteralPath $inFile -Value $gateIn -Encoding utf8 -NoNewline
     $outFile = Join-Path $tmpRoot "gate16-out-$id.txt"
     $errFile = Join-Path $tmpRoot "gate16-err-$id.txt"
-    $proc = Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', $GateScript) -RedirectStandardInput $inFile -RedirectStandardOutput $outFile -RedirectStandardError $errFile -NoNewWindow -Wait -PassThru
+    $proc = Start-Process -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', $GateScript) -RedirectStandardInput $inFile -RedirectStandardOutput $outFile -RedirectStandardError $errFile -NoNewWindow -Wait -PassThru
     Add-Result -Name '16. El hook de seguridad bloquea la invocacion directa del helper REST' -Passed ($proc.ExitCode -eq 2)
 }
 else {
@@ -787,19 +806,20 @@ $noneAllowed = $true
 foreach ($t in $forbiddenFutureTypes) { if ($script:AdoPermissionsAllowedOperationTypes.Contains($t)) { $noneAllowed = $false } }
 Add-Result -Name '26. La tabla de operationTypes permitida no incluye (todavia) repos/ramas/politicas PR' -Passed $noneAllowed
 
-$authRulePath = Join-Path $projectRoot '.kiro\rules\azure-devops-permissions\authorization.md'
+# Test 26b: verifica que el steering no prohiba permanentemente ampliar a repos/ramas/PR.
+# La regla de extensibilidad fue agregada a .cursor/rules/azure-devops.mdc (2026-09-11)
+# tras la limpieza Fase 0. Antes apuntaba a .kiro/rules/azure-devops-permissions/authorization.md
+# (ruta de la era Claude, ya eliminada). Ahora resuelve al steering correcto.
+$authRulePath = Join-Path $projectRoot '.kiro' 'steering' 'azure-devops.md'
 if (Test-Path -LiteralPath $authRulePath) {
     $authRuleText = Get-Content -LiteralPath $authRulePath -Raw
-    # OJO: '.' en .NET regex NO cruza saltos de linea por default -- un
-    # markdown con "**No\nqueda prohibido**" envuelto en varias lineas
-    # nunca matchea con '.{0,40}' (bug real de test encontrado al
-    # construir este arnes). Se usa [\s\S] para que si cruce saltos de
-    # linea.
+    # OJO: '.' en .NET regex NO cruza saltos de linea por default.
+    # Se usa [\s\S] para que si cruce saltos de linea.
     $hasNoPermanentBan = $authRuleText -match 'no[\s\S]{0,40}prohib' -or $authRuleText -match 'puede ampliarse'
-    Add-Result -Name '26b. authorization.md no prohibe permanentemente ampliar a repos/ramas/politicas PR' -Passed $hasNoPermanentBan
+    Add-Result -Name '26b. steering azure-devops no prohibe permanentemente ampliar a repos/ramas/PR' -Passed $hasNoPermanentBan
 }
 else {
-    Add-Result -Name '26b. authorization.md no prohibe permanentemente ampliar a repos/ramas/politicas PR' -Passed $false -Detail 'Archivo no encontrado (se crea en un paso posterior de esta construccion).'
+    Add-Result -Name '26b. steering azure-devops no prohibe permanentemente ampliar a repos/ramas/PR' -Passed $false -Detail 'Archivo no encontrado: .cursor/rules/azure-devops.mdc'
 }
 
 # ============================================================

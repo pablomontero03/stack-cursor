@@ -232,3 +232,80 @@ Su destino final (referencia histórica, archivo, o retiro) es una
 decisión del usuario, posterior a validar que la plantilla ligera +
 `orchestrate-application-pipeline-cycle` producen un plan equivalente —
 nunca una decisión automática de esta skill.
+
+## Modo agéntico — uso correcto de AgenticCycleState
+
+Cuando `agentic_mode=on`, el coordinador gestiona el estado persistido con
+`New-AgenticCycleState.ps1` y consulta ADO con `Invoke-AgenticCycleWake.ps1`.
+El polling solo funciona si los IDs de ADO se pasan con `-AdoIds` en cada
+transición de fase:
+
+```powershell
+# Al iniciar el ciclo
+New-AgenticCycleState.ps1 -AppId "<app>" -Phase "awaiting-build"
+    -InputHash "<hash>" -RunId "<app>-<fecha>"
+
+# Después de encolar el Build (pasar build_id y release_definition_id)
+New-AgenticCycleState.ps1 -AppId "<app>" -RunId "<app>-<fecha>"
+    -Phase "build-running"
+    -AdoIds @{build_id=<BUILD_RUN_ID>; release_definition_id=<REL_DEF_ID>}
+
+# Después de crear la instancia del Release
+New-AgenticCycleState.ps1 -RunId "<app>-<fecha>" -Phase "release-dev-running"
+    -AdoIds @{release_instance_dev=<RELEASE_INSTANCE_ID>}
+
+# El Wake pollea ADO en cada tick del monitor
+Invoke-AgenticCycleWake.ps1 -RunId "<app>-<fecha>" -AdoProject "DevOps"
+# → wait | advance | notify-user | abort
+```
+
+**IMPORTANTE:** `-RunId` es el **slug del archivo de estado** (no el ID del
+build run de ADO). Sin `-AdoIds`, el Wake retorna `notify-user` sin pollear
+nada. El archivo de estado vive en `docs/pipeline-cycles/<RunId>.json`.
+
+---
+
+## aks-diagnoser: componente permanente del ciclo agéntico
+
+**Regla:** cuando `Invoke-AgenticCycleWake` retorna `decision=notify-user` en la fase `pod-running` o `pod-running-uat` (por `verdict=crash`, `stale`, o `error`), el coordinador **siempre** despacha `aks-diagnoser` antes de diagnosticar manualmente.
+
+```
+Wake decision=notify-user (pod-running, verdict=crash/stale/error)
+  → spawn aks-diagnoser(namespace, servicesname)
+    → logs + describe + events + exit code analysis
+    → devuelve causa raíz + acción recomendada
+  → coordinador aplica el fix (recursos, health path, imagen)
+  → re-encola Build o hace kubectl patch
+```
+
+**Por qué permanente:** auth-api demostró que un pod en CrashLoopBackOff puede tener causas encadenadas (OOM → puerto → health path). El diagnoser analiza todo en contexto en un solo pase; diagnosticar manualmente tarda 3-5 ciclos de prueba y error.
+
+**No aplica cuando:** el pod pasa a `ready=true` directamente (Happy path — no hay nada que diagnosticar).
+
+---
+
+## ado-pipeline-reviewer: componente permanente del ciclo agéntico
+
+**Regla:** el reviewer entra en dos momentos fijos del ciclo, siempre:
+
+1. **Onboarding de app nueva** (primer ciclo de vida, repo/stack no conocido):
+   ```
+   builder genera planes (VG + Build + Release)
+     → reviewer revisa ANTES del Apply
+       → valida: namespaces, FQDNs, recursos, branchFilters, health path, Prod TG/approver
+       → reporta: OK / observaciones / bloqueantes
+     → coordinador aplica solo si reviewer reporta OK o solo con observaciones menores
+   ```
+
+2. **Cuando el builder reporta advertencias no estándar** (IDs sin resolver, comportamiento inesperado, warnings que Test-AdoClassicPlan no bloquea):
+   ```
+   builder entrega plan con warnings
+     → reviewer analiza el plan completo en contexto
+     → decide si las advertencias son bloqueantes o aceptables
+   ```
+
+**En paralelo con:** la generación de manifests (el coordinador crea los YML mientras el reviewer analiza el plan estructural — no es un paso secuencial, es paralelo).
+
+**No aplica cuando:** es un redeploy de app ya conocida y configurada sin cambios de alcance (los patrones están probados — no hay valor en revisar lo que ya funcionó).
+
+**Objetivo:** ningún agente del stack queda sin uso. El reviewer y el diagnoser cubren los dos puntos de fallo más frecuentes del ciclo: plan incorrecto y pod que no levanta.

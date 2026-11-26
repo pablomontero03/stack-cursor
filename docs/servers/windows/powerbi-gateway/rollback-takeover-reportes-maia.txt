@@ -1,0 +1,32 @@
+﻿ROLLBACK reportes maia - Take over
+Fecha: 2026-07-24
+Workspace: Medismart_WFM (b3a89803-6662-4935-85dd-ec6b429f0882)
+Dataset ID: 9893a0bd-704a-46cf-9f66-e5608caa45c3
+Dueño settings ANTES: gmatarrita@medismart.net
+Estado ANTES:
+- Take over visible: SI
+- Disconnect warning: SI (edited by unauthorized user)
+- Scheduled refresh disabled: SI
+- Last refresh failed: 6/8/2026 12:20:21 PM
+- Gateway toggle: Off
+- Conexiones unbound: SharePoint msworkforce, Web elastic.grupomontecristo.com, MySQL gmon-prod-mysql-eastus2-0001 / cr_wfm
+
+ROLLBACK:
+1. Iniciar sesion como gmatarrita@medismart.net
+2. Ir a Settings del modelo reportes maia
+3. Pulsar Take over (recupera ownership de settings)
+4. Re-mapear conexiones si hiciera falta (SharePoint WFM, Elastic_v2, BD WFM)
+
+DESPUES Take over (2026-07-24):
+Dueño settings AHORA: pmontero@grupomontecristo.com
+Take over prompt: NO
+Read-only: NO
+Warning disconnect unauthorized: DESAPARECIO
+Gateway toggle: On (Not configured correctly)
+Refresh sigue fallando por conexiones unbound (esperado hasta paso 2)
+
+ROLLBACK actualizado:
+1. Login como gmatarrita@medismart.net
+2. Settings reportes maia -> Take over
+3. Aceptar dialogo (borra credenciales de pmontero)
+4. Reingresar/mapear conexiones SharePoint, Elastic, MySQL

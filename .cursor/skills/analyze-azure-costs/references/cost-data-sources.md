@@ -39,7 +39,7 @@
 
 Azure CLI (`az`) y `az rest` con la sesión local ya autenticada son el
 mecanismo de acceso a todas estas fuentes. El MCP `azure` no es requisito
-— sigue diferido (ver `.claude/rules/azure/authorization.md`); si algún
+— sigue diferido (ver `.cursor/rules/azure.mdc`); si algún
 día se instala y se valida, puede usarse para lecturas, pero Azure CLI/
 Resource Graph/APIs oficiales deben seguir funcionando como vía completa
 independiente.

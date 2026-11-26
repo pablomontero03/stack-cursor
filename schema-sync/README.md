@@ -299,25 +299,27 @@ El horario típico es Dom–Vie 19:00 America/Costa_Rica, pero el schedule real 
 
 ## Orquestador multi-BD
 
-Workflow:
+Hay DOS orquestadores en n8n-interno con el mismo grafo (14 nodos), repartidos por alcance.
+Estado verificado en vivo el 2026-11-09:
 
-    ScHmSyNcOrCh0001
-    Schema Sync Multi-BD (orquestador)
+| Flujo | Id | Alcance | Schedule (CR) | Estado |
+|---|---|---|---|---|
+| Núcleo | `ScHmSyNcOrCh0001` | core_*, da_*, bundle core-workflow-global, OpsObservability, sds/stg_blue, buklo_lab (21 enabled de 22) | Dom–Vie 19:00 | activo, do_not_auto_run=false |
+| Negocio + Staging | `F9RXPgIJQ7QzZ15q` | 28 en catálogo, 18 enabled | Dom–Vie 20:30 | activo desde 2026-11-09, do_not_auto_run=false |
 
-Estado requerido:
-
-    Inactivo
-    do_not_auto_run=true
-
-El orquestador permanece montado para gate y preview. No debe ejecutar sincronizaciones automáticamente.
+Ambos ejecutan sync real: Extract de solo lectura, push a main del repo y PR main → release sin autocomplete. Nunca escriben en SQL.
 
 Reglas:
 
-- No ejecutar el orquestador salvo solicitud explícita.
-- No cambiar do_not_auto_run a false automáticamente.
-- No conectar un nodo Run Sync automáticamente.
-- No activar el workflow automáticamente.
+- **Espejo:** cualquier mantenimiento o mejora del grafo, nodos o lógica se aplica a los DOS flujos. Respaldar ambos antes (`.local/schema-sync/backups/`).
+- do_not_auto_run=true detiene un orquestador sin desactivarlo; usarlo como freno.
+- No ejecutar un orquestador manualmente fuera de su schedule salvo solicitud explícita.
+- Una base nueva entra con enabled=false, se pilotea y pasa a enabled=true solo con status=success y buildOk=true.
 - No ejecutar batch por inferencia.
+- Bases heavy (`sqldb_stg_hana`, `sqldb_stg_hana_nomed`, `sqldb_SOFTLAND`): el Compare live tarda más de 40 min por base y crashea el ciclo. Quedan enabled=false, heavy=true y run_heavy=false; procesarlas aparte con DACPAC y CommandTimeout alto.
+- Bases del flujo 2 con fallo pendiente (enabled=false): build SSDT roto en `int_medica`, `int_nomedica`, `stg_iolab`; drift BD↔repo en `database_maintenance`, `gm_cotizadores`, `pre_stage`, `sds_salesforce`.
+- Repos vacíos sin SSDT, aún fuera del catálogo: `project_sqldb_dw_eflow`, `project_sqldb_eflow_sislocar`, `project_sqldb_rj_coyol`.
+- `sqldb_da_global` (flujo 1) sigue enabled=false hasta validar que su SSDT compile.
 
 El helper batch es dry-run por defecto:
 
@@ -657,5 +659,22 @@ Funciones o módulos truncados con headers /*@p_param */:
 - El PR es main → release.
 - El PR no utiliza autocomplete.
 - Las notificaciones se envían a Teams mediante Power Automate.
-- El orquestador multi-BD permanece inactivo.
+- Los dos orquestadores multi-BD están activos y se mantienen en espejo (ver sección "Orquestador multi-BD").
 - La escritura SQL está prohibida.
+
+
+
+## Fase 2: main = BD de prod (desde 2026-11-09)
+
+Para las bases listadas en `/home/soporte/schema-sync/reconcile-enabled.txt`, `run-sync.sh`
+corre además `reconcile-and-push.sh`: Extract de solo lectura (`ExtractTarget=SchemaObjectType`),
+reconciliación del proyecto contra la BD, compilación en el .60 y push a `main` siempre que haya
+cambios. `main` queda igual a prod aunque no compile; el error queda en el resultado y en Teams.
+
+- Se conserva el fin de línea de la BD (CRLF en módulos); si no, Schema Compare marca SPs como modificados.
+- Fuera de alcance: usuarios/roles/permisos, carpetas `Scripts/`, archivos fuera del `.sqlproj`.
+- Bases en fase 2: 45 + `sqldb_core_global` del bundle (desde 2026-11-10). Fuera: `sqldb_core_workflow` (pendiente de revisión) y las 3 heavy.
+- Las que siguen en fase 1 suben a `main`, pero si quedan diferencias tras el sync no suben nada.
+
+Detalle, verificación y rollback: `docs/schema-sync/FASE2-RECONCILE-FROM-EXTRACT.md`.
+Scripts versionados: `schema-sync/host60/`.

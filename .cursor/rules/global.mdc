@@ -6,7 +6,7 @@ alwaysApply: true
 
 ## Raíz del proyecto
 
-- La raíz del proyecto es `$REPO_ROOT` (variable de entorno seteada por `setup.sh`).
+- La raíz del proyecto es `/home/cursor/stack-cursor`.
 - Interpretar todas las rutas relativas desde `$REPO_ROOT`.
 - No inspeccionar rutas fuera de esta raíz sin autorización explícita.
 - Los scripts PowerShell se ejecutan con `pwsh` (PowerShell Core 7+, no Windows PowerShell).
@@ -47,7 +47,7 @@ Este stack opera con **mínimo de aprobaciones**. El flujo es:
 ## Secretos y credenciales
 
 - Las credenciales viven en `$REPO_ROOT/env/.env` (chmod 600, no versionado).
-- Las variables de entorno están disponibles en el shell vía `setup.sh`.
+- Las variables de entorno salen de `env/.env` (`set -a; source env/.env; set +a`).
 - Nunca imprimir, copiar ni almacenar passwords, PAT, tokens o connection strings completas.
 - Usar placeholders `${NOMBRE_VARIABLE}` en documentación y planes.
 
@@ -63,6 +63,79 @@ Cada dominio es completamente independiente: **no comparte scripts, hooks, agent
 - `schema-sync` — Sincronización de esquemas SQL → repositorios SSDT
 - `linux-servers` / `windows-servers` — Operaciones sobre servidores
 
+## Llamadas HTTP a APIs (n8n, REST) — reglas de estabilidad del gateway
+El gateway colapsa (loop-stall) cuando procesa respuestas JSON grandes. Reglas obligatorias:
+
+**Preferir siempre las herramientas MCP de `n8n-productivo`** sobre bash/curl.
+El MCP maneja el streaming sin bloquear el event loop del gateway.
+
+**Si se debe usar bash (solo cuando el MCP no cubre la operación):**
+- NO pedir el workflow completo con GET — el JSON puede pesar cientos de KB.
+- Guardar siempre en archivo intermedio, nunca pipe directo: `curl ... -o /tmp/wf.json`
+- NO usar `pwsh`/PowerShell para llamadas HTTP — solo `curl` + `python3`.
+- Procesar el archivo en un paso separado, nunca en el mismo comando.
+- Limpiar archivos temporales: `rm -f /tmp/wf.json`
+- Scripts `.ps1` (ADO, AKS) siguen siendo válidos para sus dominios.
+
+
+## Inventarios y consultas masivas (ADO, AKS, Azure)
+Consultas que devuelven listas grandes o scripts que hacen cientos de llamadas HTTP **bloquean el event loop del gateway y lo tumban**.
+Reglas obligatorias:
+
+- **NO ejecutar scripts de inventario pesado dentro del agente** (ej: `Export-AdoPermissionsSecurityInventory.ps1`, inventarios completos de repos, grupos, permisos).
+- Estos scripts deben ejecutarse **directamente en WSL por el operador**, no por el agente.
+- El agente debe preparar el comando exacto y pedirle al operador que lo ejecute, luego leer el resultado desde el archivo generado.
+- **NO hacer inventarios completos** en una sola llamada MCP (listar TODOS los pipelines, TODOS los repos, TODOS los work items).
+- **Filtrar siempre** — usar parámetros de búsqueda, project, nombre, top/limit.
+- **Paginar** — `$top=20` o `continuationToken` en lugar de traer todo.
+- Preferir búsqueda por ID/nombre específico sobre listado general.
+
+
+## Archivos temporales
+En Cursor no existen `$KIROCREW_SCRATCH` ni `$KIROCREW_HOME`. Los temporales van en `/tmp` con un nombre explícito.
+
+Reglas:
+- Los archivos temporales van en `/tmp` con un nombre explícito.
+- Para leer un archivo del scratch, usar la ruta absoluta que ya devolvió la herramienta. No buscar en rutas de Kiro. El scratch de este stack es `/tmp`.
+- O guardar la ruta en una variable verificada:
+  ```bash
+  SCRATCH="/tmp"
+  ```
+- Si el archivo es grande (>50KB), **guardar el output en un archivo** en lugar de imprimirlo al stdout del agente:
+  ```bash
+  python3 script.py "$ARCHIVO" > /tmp/output.txt
+  cat /tmp/output.txt
+  ```
+
+
+## Setup en Cursor
+No ejecutar `setup-kiro.sh` ni `source ./setup.sh`. En Kiro ese script reiniciaba el gateway y cortaba la sesión. Aquí las variables se cargan desde `env/.env` y `./setup-cursor.sh` no reinicia el worker.
+
+**Vía PREFERIDA en sesión activa — cargar el `.env` directo, sin tocar Crew:**
+```bash
+source /home/cursor/stack-cursor/env/.env
+export REPO_ROOT=/home/cursor/stack-cursor
+```
+Esto carga `$AZURE_DEVOPS_PAT`, `$REPO_ROOT` y demás variables sin reiniciar el gateway.
+
+**Si por alguna razón se necesita setup.sh**, usar siempre `--no-restart`:
+```bash
+set -a; source env/.env; set +a
+```
+Reservar el setup sin `--no-restart` solo para instalaciones nuevas o cuando el operador
+pide explícitamente recargar agentes/skills. **Nunca `source ./setup.sh` a secas dentro de
+una sesión activa.**
+
 ## Inventario siempre en vivo
 
 Nunca asumir que un ID, nombre, cluster, namespace, pipeline, pool, branch, task group o credencial citados en la documentación están vigentes. Siempre confirmar contra el inventario en vivo antes de operar.
+
+## Consulta de documentación oficial Microsoft (transversal)
+
+Para doc canónica de cualquier producto Microsoft que tocamos (Azure, AKS, Azure DevOps, SQL Server/Azure SQL/SqlPackage/DACPAC, .NET, Bicep, `az`/`Az` PowerShell), existe la CLI `mslearn` (`npx -y @microsoft/learn-cli <cmd>`, sin instalar): `search "<tema>"`, `code-search "<tema>" --language <lang>`, `fetch "<url>"`. Aplica a todos los dominios Microsoft, no solo AKS.
+
+**Es UNA opción de consulta, no la única ni la autoridad final.** Usarla cuando se necesita la fuente oficial de Microsoft (verificar sintaxis/parámetros, comportamiento documentado, confirmar un error en vez de teorizar), pero combinarla con el criterio propio, `web_search`/`web_fetch`, y sobre todo el **inventario en vivo** (la doc describe el producto genérico, no nuestra instalación concreta). No limitarse a lo que diga Learn ni tratarlo como palabra final: si la doc no resuelve o contradice lo observado, prevalece la evidencia del entorno real. Solo lectura — no reemplaza `az` CLI ni los MCP para operar. (Node ≥22 recomendado; en este host corre con Node 20 e imprime `EBADENGINE` pero funciona.)
+
+## Método de diagnóstico de fallos
+
+Al diagnosticar cualquier bug o regresión (pod, pipeline, DACPAC, DNS, VG, n8n, servidor), seguir el método: (1) loop reproducible rojo/verde ANTES de teorizar, (2) minimizar al mínimo que falla, (3) 3-5 hipótesis falsables rankeadas, (4) instrumentar una variable a la vez. **No ciclar entre las hipótesis iniciales:** si se agotan sin resolver, ampliar el espacio con la evidencia nueva, cambiar de enfoque de raíz o escalar — nunca orbitar las mismas ideas. Fix+test de regresión solo si el bug es de infra; el código de app se reporta con evidencia, no se corrige. Detalle completo: `docs/METODO-DIAGNOSTICO-FALLOS.md`.

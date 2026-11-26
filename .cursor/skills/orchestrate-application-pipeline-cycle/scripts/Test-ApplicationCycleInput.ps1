@@ -202,6 +202,25 @@ function Test-ApplicationCycleInputObject {
         $validationMode = 'preguntar'
     }
 
+    # Leer el default global de modo agentico desde .cursor/agentic-mode.json
+    # si REPO_ROOT esta definido (la raíz es /home/cursor/stack-cursor). Sin el archivo, el default es 'off'.
+    $globalAgenticDefault = 'off'
+    try {
+        $repoRoot = $env:REPO_ROOT
+        if (-not $repoRoot) {
+            # Fallback: subir desde PSScriptRoot (scripts/ -> skill/ -> skills/ -> .cursor/ -> repo/)
+            $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+        }
+        $globalConfigPath = Join-Path $repoRoot '.cursor' 'agentic-mode.json'
+        if (Test-Path -LiteralPath $globalConfigPath) {
+            $cfg = Get-Content -LiteralPath $globalConfigPath -Raw | ConvertFrom-Json
+            if ($cfg.agentic_mode_default -in @('on', 'off')) {
+                $globalAgenticDefault = $cfg.agentic_mode_default
+            }
+        }
+    }
+    catch { } # Si falla la lectura del config, se usa 'off' como default seguro
+
     $executionDefaults = [ordered]@{
         max_automatic_configuration_retries_per_environment = 2
         status_poll_interval_seconds                        = 120
@@ -216,6 +235,7 @@ function Test-ApplicationCycleInputObject {
         production_requires_separate_approval                = $true
         allow_application_code_changes                       = $false
         allow_deletions                                       = $false
+        agentic_mode                                         = $globalAgenticDefault
     }
     $execution = Get-AppCycleProp -Obj $root -Name 'execution'
     $normalizedExecution = [ordered]@{}
@@ -231,6 +251,11 @@ function Test-ApplicationCycleInputObject {
     }
     if ([bool]$normalizedExecution['allow_application_code_changes']) {
         $errorsRef.Add("'INPUT.execution.allow_application_code_changes' = true no esta permitido por este ciclo -- un cambio de codigo siempre requiere solicitud explicita y plan nuevo, nunca una bandera de INPUT.")
+    }
+
+    $agenticMode = [string]$normalizedExecution['agentic_mode']
+    if ($agenticMode -notin @('on', 'off')) {
+        $errorsRef.Add("'INPUT.execution.agentic_mode' invalido ('$agenticMode'); debe ser 'on' o 'off'. Default global: 'off'.")
     }
 
     $ok = ($errorsRef.Count -eq 0)

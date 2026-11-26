@@ -20,7 +20,7 @@ bien: `Invoke-AdoPermissionsRest` tiene una guardia dura que RECHAZA
 cualquier `set-git-permissions-ace` cuyo body dejaría fuera a una
 identidad con ACE real hoy, consultando en vivo antes de escribir. Sin
 excepción ni flag para desactivarla — cubre incluso un plan armado a
-mano. Ver `.claude/rules/azure-devops-permissions/security.md` §
+mano. Ver `.cursor/rules/azure-devops.mdc` (sección de seguridad) §
 "Guardia dura..." y el test 10d.
 
 ## Descriptor de ACE de Security: SID legado, no Graph
@@ -204,3 +204,55 @@ API" sin antes probar esta combinación exacta. Ampliar
 `Get-AdoPermissionsMatrixDefinition` para administrar también esta acción
 del namespace `Project` es un candidato de mejora futura — no
 implementado en esta sesión.
+
+## Readback de ACL: parsear $resp.Body, no $resp.value directo
+
+Al leer un ACL en vivo para readback (GET
+`accesscontrollists/<ns>?token=<token>&api-version=7.1`) vía
+`Invoke-AdoPermissionsRest` (dot-sourced), el wrapper devuelve un objeto
+con propiedades `.Body`, `.Headers`, `.StatusCode`. El ACL real
+(`.value[0].acesDictionary`) vive dentro de `.Body`, NO en `$resp.value`
+directo. Indexar `$resp.value[0]` da "Cannot index into a null array" y
+un conteo falso de 1 identidad (enumera Body/Headers/StatusCode). Correcto:
+`$body = $resp.Body; if ($body -is [string]) { $body = $body | ConvertFrom-Json };
+$acl = $body.value[0]`, luego recorrer `$acl.acesDictionary`.
+Confirmado 2026-09-16 en el readback de CORE-PLT (anchor Code-Reviewers 82038).
+
+## Regla crítica: no procesar JSON grande inline en shell
+**Causa de crashes del gateway confirmada en producción (2026-09-21).**
+
+Procesar JSON de más de ~50KB directamente en el tool de shell (heredoc Python inline, `curl | python3`, `python3 -c "..."` con JSON grande) bloquea el ACP y tumba el gateway.
+
+**Patrón correcto obligatorio:**
+1. Descargar/guardar el JSON a un archivo en disco: `curl ... -o /tmp/data.json`
+2. Procesar con un script `.py` separado que lee del archivo
+3. Guardar el resumen en `/tmp/output.txt`
+4. Leer y mostrar solo el `.txt` (que es corto)
+5. Limpiar temporales: `rm -f /tmp/data.json /tmp/output.txt`
+
+**Nunca:**
+- Python inline con JSON de cientos de KB en el mismo comando
+- `curl ... | python3 -c '...'` con respuesta grande
+- Heredoc con JSON inline de cientos de líneas
+- Usar `/tmp` directamente en bash sin verificar que existe
+
+**Aplica a:** inventarios ADO, manifests Kubernetes, respuestas de API con listas largas, archivos de configuración grandes.
+
+## Regla: no ejecutar setup.sh de Kiro
+**Causa de crashes del gateway confirmada en producción (2026-09-21).**
+
+No ejecutar `setup-kiro.sh` ni `source ./setup.sh`. Las variables se cargan con `set -a; source env/.env; set +a`. `./setup-cursor.sh` no reinicia el worker.
+
+**Siempre usar `--no-restart` cuando se ejecuta desde una sesión activa de Crew:**
+```bash
+set -a; source env/.env; set +a
+```
+
+**Cuándo SÍ reiniciar (sin --no-restart):**
+- Primera instalación en una máquina nueva
+- Cuando el operador lo pide explícitamente
+- Cuando se agregan nuevos agentes o skills que requieren recarga
+
+**Cuándo NO reiniciar (usar --no-restart):**
+- Cualquier vez que el agente ejecuta setup.sh para cargar variables de entorno
+- Al inicio de scripts que solo necesitan `$REPO_ROOT`, `$AZURE_DEVOPS_PAT`, etc.

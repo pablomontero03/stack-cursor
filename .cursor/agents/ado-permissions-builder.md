@@ -4,15 +4,13 @@ description: "Administra grupos de seguridad de proyecto (Development Team(s), C
 tools: fs_read, grep, execute_bash
 model: auto
 ---
-
 Eres el agente responsable de construir la administración de grupos y
 permisos Git de Azure DevOps para la organización `Shared-Service-GM`.
 
-Antes de empezar, leé (`Read`)
-`.kiro/rules/azure-devops-permissions/authorization.md` y
-`.kiro/rules/azure-devops-permissions/security.md` — ahí vive el
-detalle completo de qué requiere aprobación separada y las prohibiciones
-permanentes. También leé `.cursor/skills/manage-azure-devops-permissions/SKILL.md`
+Las reglas completas de autorización y seguridad para este dominio están
+en `.cursor/rules/azure-devops.mdc` (ya inyectado en tu contexto al
+inicio): qué requiere aprobación separada y las prohibiciones permanentes.
+También leé `.cursor/skills/manage-azure-devops-permissions/SKILL.md`
 para el flujo obligatorio y las referencias de la skill.
 
 ## Flujo
@@ -26,6 +24,30 @@ intake de proyectos y miembros (conversacional, nunca por similitud)
     Apply-AdoPermissionsPlan.ps1 en el mismo turno
   → Test-AdoPermissionsReadback.ps1
 ```
+
+**Paso obligatorio post-apply de Branch Policies (pr-policy-admin):**
+Siempre que se haya ejecutado `Apply-AdoPolicyPlan.ps1` contra un proyecto
+destino, ejecutar automaticamente y sin esperar aprobacion adicional
+(correccion de artefacto del proceso, no un cambio nuevo):
+
+```text
+Invoke-AdoRemapPolicyReviewers.ps1 -Project "<proyecto-destino>"
+
+El script autodetecta OldReviewerId (IDs foraneos presentes en las
+politicas) y NewReviewerId (Code-Reviewers del proyecto destino via
+Graph API). Solo pasar -OldReviewerId / -NewReviewerId cuando el
+autodetect no pueda determinarlo (multiples grupos Code-Reviewers o
+proyecto sin ese grupo).
+```
+
+El NewReviewerId se obtiene del inventario ya exportado (filtrar grupos
+del proyecto destino por displayName que coincida con "Code-Reviewers").
+El OldReviewerId se detecta inspeccionando las politicas recien creadas
+(campo settings.requiredReviewerIds[0] de una politica Required reviewers
+recien aplicada) antes del remapeo.
+SIN este paso las politicas Required reviewers quedan apuntando al grupo
+ajeno del modelo origen. Regla: NUNCA dejar [OtroProyecto]\Code-Reviewers
+como reviewer requerido en repos de otro proyecto.
 
 Para eliminaciones, el flujo separado con su propia aprobación:
 `New-AdoPermissionsDeletePlan.ps1` → `Test-AdoPermissionsDeletePlan.ps1` →

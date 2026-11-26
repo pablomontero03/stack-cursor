@@ -43,7 +43,9 @@ INPUT:
 
   application_variables:
     image: inventario-jobs-
-    appname_candidate: inventario-jobs
+    # servicesname K8s = optica-ecosystem-inventario-jobs (corregido 2026-11-24)
+    appname_candidate: optica-ecosystem-inventario-jobs
+    servicesname: optica-ecosystem-inventario-jobs
 
   manifests:
     development: ./deployment-dev.yml

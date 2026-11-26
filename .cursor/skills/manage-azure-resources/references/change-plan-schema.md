@@ -74,7 +74,7 @@ operación a la que le falte alguno:
 - Un Resource Group completo (`resourceType =
   'Microsoft.Resources/resourceGroups'`, `action = 'delete'`) nunca puede
   compartir `pendingDeleteOperations` con otra eliminación — enforced en 3
-  capas (ver `.claude/rules/azure/security.md`).
+  capas (ver `.cursor/rules/azure.mdc`).
 
 ## `New-AzureChangePlan.ps1`
 

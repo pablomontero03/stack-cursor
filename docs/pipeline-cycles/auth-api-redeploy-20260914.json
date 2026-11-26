@@ -1,0 +1,25 @@
+{
+  "agentic_run_id": "auth-api-redeploy-20260914",
+  "app_id": "mod-ag-test-microservice-auth-api",
+  "started_at": "2026-09-14T17:48:08Z",
+  "phase": "pod-running",
+  "input_hash": "redeploy-20260914-1147",
+  "plan_validation_hash": "",
+  "ado": {
+    "build_id": 22430,
+    "release_definition_id": 400,
+    "release_instance_dev": 7297,
+    "release_instance_uat": null,
+    "namespace": "mod-ag-test-dev",
+    "namespace_uat": "mod-ag-test-uat",
+    "servicesname": "mod-ag-test-microservice-auth-api"
+  },
+  "last_observed": {
+    "domain": "phase-change",
+    "state": "pod-running",
+    "at": "2026-09-14T17:53:48Z"
+  },
+  "observations": [],
+  "outcome": "pending",
+  "error": ""
+}

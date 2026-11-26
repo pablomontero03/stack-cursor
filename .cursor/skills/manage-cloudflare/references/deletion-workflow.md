@@ -5,7 +5,7 @@ principal de `change-workflow.md` — nunca se agrupan.
 
 ## Qué cuenta como eliminación
 
-Ver `.claude/rules/cloudflare/security.md` § Eliminación lógica — incluye
+Ver `.cursor/rules/cloudflare.mdc` (sección Eliminación lógica) — incluye
 cualquier `DELETE` HTTP, purga de cache, reemplazo de un Ruleset que
 remueve reglas, eliminar zonas/DNS/Workers/Pages/KV/R2/D1/Queues/Tunnels/
 certificados/load balancers, `terraform destroy`, `wrangler delete`,

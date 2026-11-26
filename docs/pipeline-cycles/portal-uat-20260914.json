@@ -1,0 +1,25 @@
+{
+  "agentic_run_id": "portal-uat-20260914",
+  "app_id": "mod-ag-test-portal",
+  "started_at": "2026-09-14T22:25:17Z",
+  "phase": "pod-running-uat",
+  "input_hash": "uat-batch-20260914",
+  "plan_validation_hash": "",
+  "ado": {
+    "build_id": 22490,
+    "release_definition_id": 402,
+    "release_instance_dev": null,
+    "release_instance_uat": 7313,
+    "namespace": "mod-ag-test-uat",
+    "namespace_uat": "mod-ag-test-uat",
+    "servicesname": "mod-ag-test-portal"
+  },
+  "last_observed": {
+    "domain": "phase-change",
+    "state": "build-running",
+    "at": "2026-09-15T00:31:14Z"
+  },
+  "observations": [],
+  "outcome": "pending",
+  "error": ""
+}

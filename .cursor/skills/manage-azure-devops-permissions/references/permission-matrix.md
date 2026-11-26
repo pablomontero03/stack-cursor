@@ -53,11 +53,11 @@ sin tocar en ese nodo.
 | `feature/*` | Development Team(s) | Not set | Not set | Not set | Not set | Not set | Not set | Not set |
 | `feature/*` | Code-Reviewers | Not set | Not set | Not set | Not set | Not set | Not set | Not set |
 | `development` | Development Team(s) | Not set | Not set | **Deny** | Not set | Not set | Not set | Not set |
-| `development` | Code-Reviewers | Not set | Not set | Not set | Not set | Not set | Not set | Not set |
+| `development` | Code-Reviewers | Not set | Not set | **Allow** | Not set | Not set | Not set | Not set |
 | `uat` | Development Team(s) | Not set | Not set | **Deny** | Not set | Not set | Not set | Not set |
-| `uat` | Code-Reviewers | Not set | Not set | Not set | Not set | Not set | Not set | Not set |
+| `uat` | Code-Reviewers | Not set | Not set | **Allow** | Not set | Not set | Not set | Not set |
 | `release` | Development Team(s) | Not set | Not set | **Deny** | Not set | Not set | Not set | Not set |
-| `release` | Code-Reviewers | Not set | Not set | Not set | Not set | Not set | Not set | Not set |
+| `release` | Code-Reviewers | Not set | Not set | **Allow** | Not set | Not set | Not set | Not set |
 | `main` | Development Team(s) | Not set | Not set | **Deny** | Not set | Not set | Not set | Not set |
 | `main` | Code-Reviewers | Not set | Not set | Not set | Not set | Not set | Not set | Not set |
 
@@ -67,6 +67,31 @@ directo salvo `feature/*`), y `main`/Code-Reviewers pasó de Deny a `Not
 set` para que puedan completar Pull Requests ahí. Ver
 `INSTRUCCIONES-CLAUDE-AZURE-DEVOPS-PERMISOS (1).md` en la raíz del repo
 para el detalle de la decisión.
+
+Actualizado 2026-09-24: Code-Reviewers pasa de `Not set` a **Allow**
+explícito en Contribute (bit 4) para `development`, `uat` y `release`.
+Motivo: completar (mergear) un PR requiere Contribute sobre la rama
+destino; la herencia desde All Repositories no bastaba porque un Deny
+heredado de nivel superior ganaba (caso real tmora en Buklo/buklo-web
+PR 13855: aprobaba pero no le aparecía el botón Complete). El Allow
+explícito por rama es el ACE más específico y gana sobre el deny
+heredado. `main` se deja en `Not set` (hereda Allow de All Repositories).
+Development Team sigue en Deny en las 4 ramas (no completa PRs).
+
+Actualizado 2026-10-16 (Buklo): para que **Development Team** complete sus
+propios PRs en `development` + `uat`, se le aplicó **Contribute = Allow**
+explícito (bit 4, `allow|=4` `deny&=~4` `merge=true`) en esas dos ramas de
+7 repos del proyecto Buklo (backend, database-snapshot, database-sqlproject,
+mailer, mobile, project, web). Mismo principio que tmora/Code-Reviewers: el
+`Deny (inherited)` del grupo SÍ ganaba y ocultaba el botón Complete pese a
+checks/aprobación en verde (evidencia: PR 14534 Darvin en
+buklo-database-sqlproject/uat). El Allow explícito por rama lo vence.
+EXCLUIDOS a propósito: `buklo-framework` y `buklo-knowledge-base` (bloqueo
+estricto — devs NO completan solos; Required reviewers bloqueante +
+`creatorVoteCounts=false`). `release`/`main` de todos quedan intactos.
+Readback: `effectiveAllow=16438` Contribute=True. Detalle completo en
+`docs/azure-devops-permissions/PERMISSIONS-AUTOMATION-ARCHITECTURE.md`
+(sección "Homogeneización completa de los 9 repos de Buklo").
 
 ## Mapeo etiqueta de UI → acción estable del security namespace
 

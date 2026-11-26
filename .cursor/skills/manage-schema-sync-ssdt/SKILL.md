@@ -1,11 +1,19 @@
 ---
 name: manage-schema-sync-ssdt
-description: "Opera, revisa y diagnostica la sincronizacion de esquemas SQL hacia repositorios SSDT mediante SchemaSyncTool, SqlPackage, Azure DevOps y n8n. Triggers: schema sync, ssdt, dacpac, base de datos, schema, sincronizacion."
+description: Opera, revisa y diagnostica la sincronizacion de esquemas SQL hacia repositorios SSDT mediante SchemaSyncTool, SqlPackage, Azure DevOps y n8n.
 triggers: [schema sync, ssdt, dacpac, base de datos, schema, sincronizacion]
 always: false
 ---
 
 # Manage Schema Sync SSDT
+
+> **Estado de madurez (Fase 3 — declarado 2026-09-11):** este dominio opera
+> como **guía de análisis con herramientas externas** (SchemaSyncTool, SqlPackage,
+> n8n-interno), no como dominio con maquinaria plan/apply/test automatizada propia.
+> El orquestador de Schema Sync vive en n8n-interno; los scripts de aplicación son
+> los de SqlPackage y SchemaSyncTool. No tiene `Apply-*.ps1` propios porque la
+> escritura va siempre por herramientas externas ya aprobadas. Esta decisión es
+> intencional y no es deuda técnica.
 
 ## Cargar solamente el contexto necesario
 
@@ -215,7 +223,7 @@ Disponible aunque `schema-sync/databases.json` no exista.
 1. No inferir autorización batch a partir de una solicitud ambigua.
 2. Exigir lista exacta de bases y confirmación explícita.
 3. Presentar dry-run y orden de ejecución.
-4. Verificar que ScHmSyNcOrCh0001 sigue inactivo salvo decisión específica.
+4. Tener presente que ScHmSyNcOrCh0001 (núcleo) y F9RXPgIJQ7QzZ15q (negocio+staging) están ACTIVOS con el gate abierto (estado 2026-11-09); cualquier cambio se aplica a los dos y se respalda antes.
 5. No cambiar do_not_auto_run automáticamente.
 6. Detenerse ante el primer fallo salvo instrucción diferente aprobada.
 7. Consolidar resultados sin completar PR.

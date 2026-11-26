@@ -7,7 +7,7 @@ cola de respuestas simuladas -- cero red real. El "reloj" y el "sleep" del
 polling se inyectan como scriptblocks falsos: nunca se espera de verdad.
 
 Uso:
-  powershell -NoProfile -ExecutionPolicy Bypass -File .\run-run-polling-tests.ps1
+  pwsh -NoProfile -File .\run-run-polling-tests.ps1
 #>
 
 $ErrorActionPreference = 'Stop'

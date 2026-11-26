@@ -3,7 +3,7 @@ Inventario de solo lectura (GET puro) de las Branch Policies (Policy
 Configurations) de un repositorio de Azure DevOps, Shared-Service-GM.
 
 Parte de la capacidad futura "pr-policy-admin" mencionada en
-.kiro/rules/azure-devops-permissions/authorization.md -- primer paso
+.cursor/rules/azure-devops.mdc -- primer paso
 (inventario) antes de un plan actual->deseado. No escribe nada.
 
 Reutiliza Invoke-AdoPermissionsRest.ps1 (dot-source interno, nunca

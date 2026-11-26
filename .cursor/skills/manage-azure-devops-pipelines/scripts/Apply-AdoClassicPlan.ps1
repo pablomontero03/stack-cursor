@@ -62,7 +62,13 @@ operaciones y todos estos datos coinciden exacto con lo aprobado):
 
 param(
     [Parameter(Mandatory)] [string]$PlanPath,
-    [Parameter(Mandatory)] [string]$InventoryPath,
+    # InventoryPath ya NO es Mandatory (2026-10-16): las familias update-only
+    # 'vg-update'/'tg-update' se validan SIN inventario (su frescura/anti-replay
+    # la garantiza el chequeo de revision en vivo en Fase 1b/1c, no un
+    # inventario). Para TODA otra familia sigue siendo obligatorio: el guardia
+    # de evidencia mas abajo lo exige cuando el plan trae validationEvidence
+    # (o deberia traerla).
+    [string]$InventoryPath,
     [string]$DeploymentDevYamlPath,
     [string]$DeploymentUatYamlPath,
     [string]$DeploymentProdYamlPath,
@@ -80,7 +86,15 @@ param(
     # PUT exacto ya armado (mutar-y-guardar fuera de este script), el
     # mismo que se hasheo al aprobar la operacion.
     [string]$UpdateBuildBodyPath,
-    [string]$UpdateReleaseBodyPath
+    [string]$UpdateReleaseBodyPath,
+    # Fase 1b (update-variable-group, agregada 2026-10-14): el body actual
+    # del VG obtenido con un GET previo, como JSON string (el contenido,
+    # no una ruta). Necesario para preservar variables existentes.
+    [string]$CurrentVariableGroupJson,
+    # Fase 1c (update-taskgroup, agregada 2026-10-16): el body actual del
+    # task group obtenido con un GET previo, como JSON string. Necesario
+    # para confirmar la revision en vivo antes de pisarla (anti-concurrencia).
+    [string]$CurrentTaskGroupJson
 )
 
 $ErrorActionPreference = 'Stop'
@@ -108,6 +122,158 @@ if (-not (Test-Path -LiteralPath $PlanPath)) {
 
 $plan = Get-Content -LiteralPath $PlanPath -Raw | ConvertFrom-Json
 
+# ── DACPAC UNIFIED HANDLER ────────────────────────────────────────────────────
+# El plan dacpac/unified usa clone+mutate desde modelos de referencia en lugar
+# del flujo validated→approvedOperations. Bypasea las guards de validationHash
+# e inventario porque no genera bodies precalculados: los datos vienen del plan.
+if ([string]$plan.family -eq 'dacpac' -and [string]$plan.pattern -eq 'unified') {
+    Write-Host "=== DACPAC Unified Handler ===" -ForegroundColor Cyan
+    Write-Host "Patron: 1 Build + 1 Release 3 stages (clone+mutate desde modelos de referencia)" -ForegroundColor Cyan
+
+    $project       = [string]$plan.project
+    if ([string]::IsNullOrWhiteSpace($project)) {
+        throw "Apply-AdoClassicPlan (dacpac/unified) rechazado: el plan no tiene 'project'. Las URIs de build/release definitions requieren el proyecto en el path."
+    }
+    $refBuildId    = [int]$plan.referenceModels.buildId
+    $refReleaseId  = [int]$plan.referenceModels.releaseId
+    $dbProjectName = [string]($plan.names.build -replace '^Build_Base_Datos_','')
+    $buildName     = [string]$plan.names.build
+    $releaseName   = [string]$plan.names.release
+    $folderPath    = [string]$plan.names.folder
+    $repoId        = [string]$plan.repo.id
+    $repoName      = [string]$plan.repo.name
+    $repoProject   = [string]$plan.repo.project
+    $dbName        = [string]$plan.release.variables.database
+    $coreGlobalRef = 'xxx'
+    if ($plan.release.PSObject.Properties['deploymentDataBasesInputs'] -and
+        $plan.release.deploymentDataBasesInputs.PSObject.Properties['sqldb_core_global_db_reference']) {
+        $coreGlobalRef = [string]$plan.release.deploymentDataBasesInputs.'sqldb_core_global_db_reference'
+    }
+
+    # ── Contrato de escritura aprobada ────────────────────────────────────────
+    # Invoke-AdoRest exige, para toda escritura, que la operacion coincida con
+    # una entrada de plan.approvedOperations (operationId/operationType/method/
+    # uri) y que el plan este validated=true con validationHash consistente.
+    # El handler dacpac/unified genera los bodies por clone+mutate en tiempo de
+    # Apply (no van embebidos en el plan): bodyHash es un placeholder y el gate
+    # lo tolera para los operationType 'reconstruidos' (create-build-definition,
+    # create-release-definition). Poblamos ese contrato aca y persistimos el
+    # plan a disco para que Invoke-AdoRest lo lea consistente.
+    $buildCreateUri   = "$script:AdoCoreBaseUrl/$project/_apis/build/definitions?api-version=7.1"
+    $releaseCreateUri = "$script:AdoReleaseBaseUrl/$project/_apis/release/definitions?api-version=7.1"
+
+    $plan.approvedOperations = @(
+        [PSCustomObject]@{
+            operationId   = 'dacpac-create-build'
+            operationType = 'create-build-definition'
+            method        = 'POST'
+            uri           = $buildCreateUri
+            bodyHash      = 'reconstructed-at-apply'
+        },
+        [PSCustomObject]@{
+            operationId   = 'dacpac-create-release'
+            operationType = 'create-release-definition'
+            method        = 'POST'
+            uri           = $releaseCreateUri
+            bodyHash      = 'reconstructed-at-apply'
+        }
+    )
+    if (-not $plan.PSObject.Properties['validationEvidence']) {
+        $plan | Add-Member -NotePropertyName validationEvidence -NotePropertyValue $null -Force
+    }
+    $plan.validated = $true
+    $plan.PSObject.Properties.Remove('validationHash')
+    $computedHash = Get-AdoPlanCanonicalHash -Plan $plan
+    $plan | Add-Member -NotePropertyName validationHash -NotePropertyValue $computedHash -Force
+    $plan | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $PlanPath -Encoding utf8
+
+    # ── Clonar Build ──────────────────────────────────────────────────────────
+    Write-Host "Clonando Build $refBuildId como $buildName ..." -ForegroundColor Yellow
+    $refBuild = (Invoke-AdoRest -Method GET -Uri "$script:AdoCoreBaseUrl/$project/_apis/build/definitions/$refBuildId`?api-version=7.1").Body
+    foreach ($f in @('id','url','uri','_links','authoredBy','createdDate','drafts','metrics',
+                     'latestBuild','latestCompletedBuild','badgeUrl')) { $refBuild.PSObject.Properties.Remove($f) }
+    $refBuild.name = $buildName
+    $refBuild.path = $folderPath
+    $refBuild.repository.id   = $repoId
+    $refBuild.repository.name = $repoName
+    $refBuild.repository.url  = "https://dev.azure.com/Shared-Service-GM/$repoProject/_git/$repoName"
+    $refBuild.variables.databaseProjectName = [PSCustomObject]@{ value = $dbProjectName; allowOverride = $false }
+    # Aplicar pathFilter si el plan lo especifica (repos compartidos con múltiples proyectos SSDT)
+    $pathFilter = $null
+    if ($plan.build.PSObject.Properties['pathFilter'] -and -not [string]::IsNullOrWhiteSpace([string]$plan.build.pathFilter)) {
+        $pathFilter = [string]$plan.build.pathFilter
+    }
+    foreach ($trigger in $refBuild.triggers) {
+        if ($trigger.PSObject.Properties['branchFilters']) {
+            if ($null -ne $pathFilter) {
+                $trigger.pathFilters = @($pathFilter)
+                Write-Host "  pathFilter aplicado: $pathFilter" -ForegroundColor Cyan
+            } else {
+                $trigger.pathFilters = @()
+            }
+        }
+    }
+    foreach ($phase in $refBuild.process.phases) {
+        foreach ($step in $phase.steps) {
+            if ($step.inputs -and $step.inputs.PSObject.Properties['databaseProjectName']) {
+                $step.inputs.databaseProjectName = '$(databaseProjectName)'
+            }
+        }
+    }
+    $newBuild = (Invoke-AdoRest -Method POST -Uri $buildCreateUri -Body $refBuild -RequireApprovedPlan -PlanPath $PlanPath -OperationId 'dacpac-create-build').Body
+    $newBuildId = [int]$newBuild.id
+    Write-Host "Build creado: id=$newBuildId name=$($newBuild.name)" -ForegroundColor Green
+    $createdSoFar.Add("create-build-definition id=$newBuildId name=$($newBuild.name)")
+
+    # ── Clonar Release ────────────────────────────────────────────────────────
+    Write-Host "Clonando Release $refReleaseId como $releaseName ..." -ForegroundColor Yellow
+    $refRelease = (Invoke-AdoRest -Method GET -Uri "$script:AdoReleaseBaseUrl/$project/_apis/release/definitions/$refReleaseId`?api-version=7.1").Body
+    foreach ($f in @('id','url','_links','createdBy','createdOn','modifiedBy','modifiedOn',
+                     'lastRelease','isDisabled','isDeleted','source','revision')) { $refRelease.PSObject.Properties.Remove($f) }
+    $refRelease.name = $releaseName
+    $refRelease.path = $folderPath
+    $newArtifactAlias = "_$buildName"
+    $refRelease.variables.database            = [PSCustomObject]@{ value = $dbName }
+    $refRelease.variables.databaseProjectName = [PSCustomObject]@{ value = $dbProjectName }
+    $refRelease.variables.build               = [PSCustomObject]@{ value = $buildName }
+    $refRelease.artifacts[0].sourceId         = "7f632f4b-b3cb-4530-a5ff-ee9f809ab478:$newBuildId"
+    $refRelease.artifacts[0].alias            = $newArtifactAlias
+    $refRelease.artifacts[0].definitionReference.definition.id   = [string]$newBuildId
+    $refRelease.artifacts[0].definitionReference.definition.name = $buildName
+    foreach ($trigger in $refRelease.triggers) { $trigger.artifactAlias = $newArtifactAlias }
+    foreach ($env in $refRelease.environments) {
+        $env.PSObject.Properties.Remove('id')
+        $env.PSObject.Properties.Remove('deployStep')
+        $env.PSObject.Properties.Remove('currentRelease')
+        $env.PSObject.Properties.Remove('badgeUrl')
+        foreach ($approvalKey in @('preDeployApprovals','postDeployApprovals')) {
+            if ($env.$approvalKey) {
+                foreach ($appr in $env.$approvalKey.approvals) { $appr.PSObject.Properties.Remove('id') }
+            }
+        }
+        foreach ($cond in $env.conditions) {
+            if ($cond.conditionType -eq 'artifact') { $cond.name = $newArtifactAlias }
+        }
+        foreach ($phase in $env.deployPhases) {
+            foreach ($task in $phase.workflowTasks) {
+                if ($task.taskId -eq '4634d6ff-8290-4605-bcbe-fb27ba3528d2') {
+                    $task.inputs.build                          = $buildName
+                    $task.inputs.sqldb_core_global_db_reference = $coreGlobalRef
+                    $task.enabled = $false
+                }
+            }
+        }
+    }
+    $newRelease = (Invoke-AdoRest -Method POST -Uri $releaseCreateUri -Body $refRelease -RequireApprovedPlan -PlanPath $PlanPath -OperationId 'dacpac-create-release').Body
+    $newReleaseId = [int]$newRelease.id
+    Write-Host "Release creado: id=$newReleaseId name=$($newRelease.name)" -ForegroundColor Green
+    $createdSoFar.Add("create-release-definition id=$newReleaseId name=$($newRelease.name)")
+
+    Write-CreatedSummary
+    exit 0
+}
+# ── FIN DACPAC UNIFIED HANDLER ────────────────────────────────────────────────
+
 if ($plan.validated -ne $true) {
     throw "Apply-AdoClassicPlan rechazado: el plan no tiene validated=true. Ejecutar Test-AdoClassicPlan.ps1 primero y resolver los bloqueantes."
 }
@@ -124,6 +290,21 @@ if ($currentHash -ne $plan.validationHash) {
 # --- Evidencia de inventario: el MISMO inventario usado para validar,
 #     todavia fresco, todavia con paginacion completa. Sin cambios
 #     respecto a versiones previas de este script. ---
+
+# Familias update-only sin inventario (2026-10-16): 'vg-update'/'tg-update'
+# se validan SIN inventario, por lo que validationEvidence queda null. Su
+# garantia anti-replay/frescura NO es un inventario de hace horas, sino el
+# chequeo de REVISION EN VIVO del recurso justo antes del PUT (Fase 1b para
+# VG, Fase 1c para task group): si alguien lo edito desde que se genero el
+# plan, la revision en vivo no coincide y Apply aborta. Por eso, SOLO para
+# esas familias Y SOLO cuando el plan no trae validationEvidence, se salta
+# todo el guardia de inventario. Para cualquier otra familia, o si una
+# familia update-only SI trae evidence, el guardia se aplica igual que
+# siempre (defensa sin cambios).
+$updateOnlyFamilies = @('vg-update', 'tg-update', 'tg-create')
+$requireInventoryEvidence = -not ([string]$plan.family -in $updateOnlyFamilies -and $null -eq $plan.validationEvidence)
+
+if ($requireInventoryEvidence) {
 
 $evidence = $plan.validationEvidence
 if (-not $evidence) {
@@ -161,7 +342,14 @@ $nowUtc = (Get-Date).ToUniversalTime()
 
 $generatedAtParsed = $null
 try {
-    $generatedAtParsed = [DateTime]::Parse([string]$evidence.inventoryGeneratedAtUtc, $null, [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+    # El inventario puede tener el timestamp en formato ISO 8601 con Z ('2026-09-11T18:01:11Z')
+    # o en el formato corto de PowerShell ('09/11/2026 18:01:11') sin indicador de timezone.
+    # En ambos casos se interpreta como UTC (AssumeUniversal + AdjustToUniversal).
+    $generatedAtParsed = [DateTime]::Parse(
+        [string]$evidence.inventoryGeneratedAtUtc,
+        $null,
+        [System.Globalization.DateTimeStyles]::AssumeUniversal -bor [System.Globalization.DateTimeStyles]::AdjustToUniversal
+    )
 }
 catch {
     throw "Apply-AdoClassicPlan rechazado: validationEvidence.inventoryGeneratedAtUtc no es una fecha valida."
@@ -169,7 +357,11 @@ catch {
 
 $validatedAtParsed = $null
 try {
-    $validatedAtParsed = [DateTime]::Parse([string]$evidence.validatedAtUtc, $null, [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+    $validatedAtParsed = [DateTime]::Parse(
+        [string]$evidence.validatedAtUtc,
+        $null,
+        [System.Globalization.DateTimeStyles]::AssumeUniversal -bor [System.Globalization.DateTimeStyles]::AdjustToUniversal
+    )
 }
 catch {
     throw "Apply-AdoClassicPlan rechazado: validationEvidence.validatedAtUtc no es una fecha valida."
@@ -208,6 +400,11 @@ if ($validationAgeHoursNow -gt $effectiveMaxAgeHours) {
     throw "Apply-AdoClassicPlan rechazado: la validacion del plan tiene $([math]::Round($validationAgeHoursNow, 1))h de antiguedad medidas desde ahora, mas que el limite efectivo de $effectiveMaxAgeHours h (tope absoluto interno: $($script:AdoAbsoluteMaxInventoryAgeHours)h). Volver a revalidar el plan antes de aplicar."
 }
 
+}  # fin if ($requireInventoryEvidence)
+else {
+    Write-Host "Familia '$($plan.family)' sin inventario: se omite el guardia de inventario (la frescura/anti-replay la garantiza el chequeo de revision en vivo del recurso en la fase de update)." -ForegroundColor DarkGray
+}
+
 # Marcadores de estado de implementacion (nombres pedidos explicitamente
 # para poder auditar de un vistazo si las fases estan implementadas).
 # Cambiados a TRUE el 2026-08-24 -- TODA la suite de pruebas simuladas
@@ -240,6 +437,7 @@ if (-not ($script:BuildPhaseImplemented -and $script:ReleasePhaseImplemented)) {
 
 $approvedOps = @()
 if ($null -ne $plan.approvedOperations) { $approvedOps = @($plan.approvedOperations) }
+
 if ($approvedOps.Count -eq 0) {
     Write-Host "El plan no tiene ninguna operacion aprobada (approvedOperations vacio). Nada que aplicar." -ForegroundColor Yellow
     Write-CreatedSummary
@@ -262,7 +460,9 @@ try {
         -ExistingBuildDefinitionId $(if ($ExistingBuildDefinitionId) { $ExistingBuildDefinitionId } else { $null }) `
         -BuildDefinitionName $BuildDefinitionName `
         -ReleaseSecretReferences $releaseSecretReferences `
-        -UpdateBuildBodyPath $UpdateBuildBodyPath -UpdateReleaseBodyPath $UpdateReleaseBodyPath
+        -UpdateBuildBodyPath $UpdateBuildBodyPath -UpdateReleaseBodyPath $UpdateReleaseBodyPath `
+        -CurrentVariableGroupJson $CurrentVariableGroupJson `
+        -CurrentTaskGroupJson $CurrentTaskGroupJson
 }
 finally {
     # El resumen se imprime SIEMPRE, incluso si una fase lanzo -- para que

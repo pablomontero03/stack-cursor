@@ -1,0 +1,22 @@
+{
+  "agentic_run_id": "auth-api-20260914",
+  "app_id": "mod-ag-test-microservice-auth-api",
+  "started_at": "2026-09-14T15:33:25Z",
+  "phase": "build-running",
+  "input_hash": "0936e562599f04cd",
+  "plan_validation_hash": "",
+  "ado": {
+    "build_id": 22429,
+    "release_definition_id": 400,
+    "release_instance_dev": null,
+    "release_instance_uat": null
+  },
+  "last_observed": {
+    "domain": "phase-change",
+    "state": "build-running",
+    "at": "2026-09-14T15:49:32Z"
+  },
+  "observations": [],
+  "outcome": "pending",
+  "error": ""
+}

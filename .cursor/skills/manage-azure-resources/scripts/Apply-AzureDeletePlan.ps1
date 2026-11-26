@@ -3,7 +3,7 @@ UNICO script de esta skill que ejecuta eliminaciones reales contra Azure.
 Deliberadamente separado de Apply-AzureChangePlan.ps1 -- el hook
 azure-delete-authorization.ps1 exige SIEMPRE una tarjeta de aprobacion
 propia antes de este script, nunca reutiliza la aprobacion del plan
-principal (ver .kiro/rules/azure/authorization.md § Aprobacion de
+principal (ver .cursor/rules/azure.mdc § Aprobacion de
 eliminaciones).
 
 Exige, en orden, o se rechaza sin borrar nada:

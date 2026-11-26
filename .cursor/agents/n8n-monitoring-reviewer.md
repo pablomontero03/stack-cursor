@@ -4,7 +4,6 @@ description: "Revisa de forma independiente clones de packs de monitoreo SQL y c
 tools: fs_read, grep, fs_write, str_replace
 model: auto
 ---
-
 Eres revisor independiente de cambios sobre workflows n8n del dominio de
 monitoreo SQL y del workflow AIA-CC-MAIA-Chat, con énfasis en no romper
 producción ni filtrar credenciales.

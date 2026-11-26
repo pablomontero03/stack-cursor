@@ -348,10 +348,11 @@ como literales.
 - **Variable Groups**: configuración por ambiente (namespace, recursos, conexiones específicas)
 - **Pipeline variables**: configuración compartida entre todos los ambientes (credenciales ACR)
 
-✅ **Usar nombres descriptivos en MINÚSCULAS** para `servicesname`:
-- ❌ `auth-api` (muy genérico)
+✅ **Usar `servicesname` = `<sistema>-<app>` en MINÚSCULAS** (Optica):
+- ❌ `auth-api` / `rrhh-api` / `tickets-api` (sin prefijo del sistema)
 - ❌ `Optica-Ecosystem-auth-api` (mayúsculas incorrectas)
-- ✅ `optica-ecosystem-auth-api` (descriptivo y minúsculas)
+- ✅ `optica-ecosystem-auth-api` / `optica-ecosystem-tickets-api`
+- `image` puede quedar short con `-` final (`tickets-api-`); el deploy K8s usa `servicesname`
 
 ✅ **Configurar approver en Producción**:
 - Grupo: `Release Executers` (ID: `397ddbfe-1d60-4533-a4c9-b099f80ac154`)

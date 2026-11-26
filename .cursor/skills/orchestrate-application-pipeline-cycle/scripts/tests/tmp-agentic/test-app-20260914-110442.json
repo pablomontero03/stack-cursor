@@ -1,0 +1,32 @@
+{
+  "agentic_run_id": "test-app-20260914-110442",
+  "app_id": "test-app",
+  "started_at": "2026-09-14T17:04:41Z",
+  "phase": "awaiting-build",
+  "input_hash": "hash-input-001",
+  "plan_validation_hash": "hash-plan-001",
+  "ado": {
+    "build_id": 12345,
+    "release_definition_id": null,
+    "release_instance_dev": null,
+    "release_instance_uat": null,
+    "namespace": null,
+    "namespace_uat": null,
+    "servicesname": null
+  },
+  "last_observed": {
+    "domain": "phase-change",
+    "state": "awaiting-build",
+    "at": "2026-09-14T17:04:42Z"
+  },
+  "observations": [
+    {
+      "buildId": 12345,
+      "domain": "ado",
+      "at": "2026-09-14T17:04:42Z",
+      "state": "en-progreso"
+    }
+  ],
+  "outcome": "pending",
+  "error": ""
+}

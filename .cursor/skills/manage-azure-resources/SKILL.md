@@ -1,6 +1,6 @@
 ---
 name: manage-azure-resources
-description: "Administra el plano de control de Microsoft Azure via Azure CLI y Resource Graph: VNets, NSG, VMs, App Service, ACR, Storage, Key Vault, RBAC, Policy, Monitor y AKS como recurso de Azure. Triggers: azure, arm, resource group, az cli, vnet, nsg, vm, storage, keyvault, policy, rbac."
+description: Administra el plano de control de Microsoft Azure via Azure CLI y Resource Graph: VNets, NSG, VMs, App Service, ACR, Storage, Key Vault, RBAC, Policy, Monitor y AKS como recurso de Azure.
 triggers: [azure, arm, resource group, az cli, vnet, nsg, vm, storage, keyvault, policy, rbac]
 always: false
 ---
@@ -20,7 +20,7 @@ vacía, configurar firewall/redes/backup), nunca sus datos. Dentro de
 Azure: lectura/inventario/diagnóstico/Resource Graph/what-if son
 automáticos; toda escritura real o eliminación exige aprobación explícita;
 nada queda prohibido de forma permanente salvo lo listado en
-`.kiro/steering/azure/security.md` § Prohibido permanentemente — un comando
+`.cursor/rules/azure/security.md` § Prohibido permanentemente — un comando
 `az` o tool MCP no reconocido siempre resuelve a "preguntar", nunca a
 "denegar".
 
@@ -43,7 +43,7 @@ El MCP oficial `azure` (`@azure/mcp`) está **diferido a propósito** — no
 existe en `.mcp.json` (la única versión publicada hoy, 2026-09-03, es una
 pre-release `3.0.0-beta.40`). Este dominio funciona 100% con Azure CLI +
 Resource Graph + ARM REST controlado. Ver
-`.kiro/steering/azure/authorization.md` § Estado del MCP `azure` antes de
+`.cursor/rules/azure/authorization.md` § Estado del MCP `azure` antes de
 proponer instalarlo.
 
 ## Cargar solamente el contexto necesario
@@ -115,13 +115,13 @@ usuario — referenciarlas por ruta.
 
 `inventory/`, `plans/`, `backups/` (respaldo pre-delete), `executions/`
 (journal de aplicación), `logs/`, `deviations/` (reportes de desviación
-del plan). Ver `.kiro/steering/azure/security.md` § Archivos locales para
+del plan). Ver `.cursor/rules/azure/security.md` § Archivos locales para
 la propuesta de `.gitignore` pendiente de aprobación.
 
 ## Fuentes de verdad de este dominio
 
-- Autorización y seguridad: `.kiro/steering/azure/authorization.md` y
-  `.kiro/steering/azure/security.md`.
+- Autorización y seguridad: `.cursor/rules/azure/authorization.md` y
+  `.cursor/rules/azure/security.md`.
 - Arquitectura completa: `docs/azure/AZURE-AUTOMATION-ARCHITECTURE.md`.
 - Especificación original: `INSTRUCCIONES-AUTOMATIZACION-AZURE.md` (raíz
   del proyecto).

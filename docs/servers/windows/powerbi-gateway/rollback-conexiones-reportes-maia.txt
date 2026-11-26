@@ -1,0 +1,58 @@
+﻿ROLLBACK reportes maia - Paso 2 mapeo conexiones
+Fecha: 2026-07-24
+Workspace: Medismart_WFM
+Dataset: 9893a0bd-704a-46cf-9f66-e5608caa45c3 (reportes maia)
+Dueño settings: pmontero@grupomontecristo.com
+
+ESTADO ANTES del paso 2:
+- Gateway toggle: On (disabled/readonly) - Not configured correctly
+- Sin personal gateway instalada
+- Maps to (3 fuentes):
+  1) Personal Cloud Connection a55d298a-efa9-4ab6-a922-73018f140a0b
+  2) Personal Cloud Connection ca72a3d6-8695-4aa8-a245-0a33db34cc7d
+  3) Personal Cloud Connection e5ff1abb-a550-429d-bf47-58cd457a4c3d
+- Opciones dropdown: solo Personal Cloud Connection + Create a connection
+  (NO aparecen SharePoint WFM / Elastic_v2 / BD WFM compartidas)
+- Scheduled refresh: deshabilitado por errores consecutivos
+- Last refresh failed: 6/8/2026 missing connection details
+- Orígenes: SharePoint msworkforce, Web elastic.grupomontecristo.com, MySQL cr_wfm
+
+ROLLBACK paso 2:
+1. Settings -> Gateway and cloud connections
+2. Remapear cada Maps to al valor previo (Personal Cloud Connection IDs arriba)
+  o Discard si Apply no se confirmo
+3. Si se crearon conexiones nuevas en Manage Connections, no borrarlas
+   salvo que se hayan creado en este cambio; documentar IDs creados abajo
+4. Rollback total settings: Take over por gmatarrita@medismart.net
+
+DETALLE ANTES paso 2 (credenciales):
+Fuentes en Data source credentials:
+1. Python
+2. SharePoint
+3. Web  
+4. MySQL cr_wfm-gmon-prod-mysql-eastus2-0001.mysql.database.azure.com
+Gateway empresa: powerbi-grupomontecristo = Not configured correctly
+Cloud Maps to: 3x Personal Cloud Connection (IDs en archivo)
+
+INTENTO paso 2 (parcial - 2026-07-24):
+- Abierto Create a connection para SharePoint
+- Auth: OAuth2, Privacy: Organizational
+- URL: https://grupomontecristo1.sharepoint.com/sites/MSWorkforce
+- Sign in OAuth: BLOQUEADO en browser automatizado (popup oauthredirect -> about:blank)
+- Edit credentials clasico: deshabilitado (disabledContainer)
+- Fuentes credentials fallidas: Python, SharePoint, Web, MySQL
+- Bloqueador extra: gateway powerbi-grupomontecristo Not configured correctly + Python en el modelo
+
+PENDIENTE usuario: completar Sign in OAuth manualmente en el dialogo abierto
+Luego continuar Web + MySQL + gateway/Python
+
+ROLLBACK si se creo conexion a medias:
+- Cancel en dialogo Configure reportes maia
+- Remapear Maps to SharePoint a Personal Cloud Connection a55d298a-efa9-4ab6-a922-73018f140a0b
+
+NOTA OAuth blank (2026-07-24 12:00):
+- popup https://preview.powerbi.com/views/oauthredirect.html queda en blanco
+- Causa: Browser embebido de Cursor no completa postMessage OAuth de Power BI
+- Accion: Cancel dialogo Create connection SharePoint
+- Workaround: hacer Sign in en Edge/Chrome normal (fuera de Cursor)
+  URL settings: https://app.powerbi.com/groups/b3a89803-6662-4935-85dd-ec6b429f0882/settings/datasets/9893a0bd-704a-46cf-9f66-e5608caa45c3?experience=power-bi

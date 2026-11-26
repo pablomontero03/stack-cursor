@@ -3,7 +3,7 @@ Genera un plan JSON determinista (validated=false) para replicar Branch
 Policies (Policy Configurations) de un repo origen hacia un repo destino,
 dentro del mismo proyecto de Shared-Service-GM. Capacidad "pr-policy-admin"
 mencionada como capacidad futura en
-.kiro/rules/azure-devops-permissions/authorization.md.
+.cursor/rules/azure-devops.mdc.
 
 Entrada: los 2 inventarios de solo lectura ya exportados por
 Export-AdoPolicyInventory.ps1 (source y target). No hace ninguna llamada

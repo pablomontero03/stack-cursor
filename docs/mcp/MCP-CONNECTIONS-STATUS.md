@@ -30,24 +30,24 @@
 Un servidor MCP de este stack se declara en **4 archivos** — corregir solo uno
 NO basta:
 
-1. `<repo>/.kiro/settings/mcp.json` (config del proyecto)
-2. `~/.kiro/settings/mcp.json` (config global de kiro-cli)
-3. `~/.kiro/crew/mcp.json` (config de KiroCrew)
-4. `~/.kiro/agents/kirocrew.json` (**el que usa el dashboard**) — este tiene
+1. `<repo>/.cursor/mcp.json` (config del proyecto)
+2. `~/.cursor/mcp.json` (config del worker en este servidor)
+3. `/home/cursor/stack-cursor/.cursor/mcp.json` (config de KiroCrew)
+4. `/home/cursor/stack-cursor/.cursor/mcp.json` (**el que usa el dashboard**) — este tiene
    el endpoint/token en **2 lugares**: bloque `url`+`headers` y bloque
    `args --header`.
 
-Tras cualquier cambio: `source setup.sh` (dispara `kirocrew restart`) **+ sesión
+Tras cualquier cambio: `./setup-cursor.sh` (no reinicia el worker; el MCP lo vuelve a cargar un reinicio de gmon-hub) **+ sesión
 nueva del dashboard**. Una sesión de chat ya abierta NO recarga tools. El agente
-no puede ejecutar `kirocrew restart` (bloqueado); lo hace el usuario.
+el MCP lo recarga un reinicio del worker gmon-hub.
 
 Diagnóstico por servidor:
 ```
-kiro-cli chat --no-interactive -vvv "di READY"
+el worker gmon-hub carga `.cursor/mcp.json`
 ```
 muestra `mcpServerInitFailureReason` (vacío = OK) y `toolsPerMcpServer`.
-Un MCP que falla repetido queda en `~/.kiro/crew/mcp-quarantine.json`;
-`kirocrew restart` tras el fix lo reintenta.
+Un MCP que falla repetido queda en `/home/cursor/stack-cursor/.cursor/mcp.json`;
+un reinicio del worker gmon-hub tras el fix lo reintenta.
 
 ---
 
@@ -72,7 +72,7 @@ Un MCP que falla repetido queda en `~/.kiro/crew/mcp-quarantine.json`;
 
 **Síntoma 1 — transporte:** con `supergateway --streamableHttp` fallaba con
 `Failed to open SSE stream: Not Found`. El servidor v1.0.0 NO expone el GET SSE
-(da `404 Cannot GET`); kiro-cli lo trata como fatal (otros clientes como Claude
+(da `404 Cannot GET`); algunos clientes lo tratan como fatal (otros clientes como Claude
 lo toleran). **Fix:** configurar con `type:http` + `url` + `headers` (HTTP
 directo), NO supergateway. Endpoint `/mcp-server/http`, token `aud=mcp-server-api`.
 NO era problema de versión ni de upgrade.
@@ -81,7 +81,7 @@ NO era problema de versión ni de upgrade.
 `search_workflows` / `execute_workflow` / `get_workflow_details`. El agente
 colisiona los nombres y solo queda invocable el del interno; una llamada sin
 desambiguar devuelve el catálogo equivocado (175 workflows de Schema Sync/SQL).
-**Fix:** bloque `toolAliases` en `~/.kiro/agents/kirocrew.json` remapeando
+**Fix:** bloque `toolAliases` en `/home/cursor/stack-cursor/.cursor/mcp.json` remapeando
 `@n8n-productivo/<tool>` a nombres únicos: **`prod_search_workflows`**,
 **`prod_execute_workflow`**, **`prod_get_workflow_details`**.
 
@@ -102,7 +102,7 @@ KiroCrew). Correr el binario con `--log-level debug` muestra `Validation failed`
 **Fix:** instalar `helm 3.22.0` / `cilium 0.20.0` / `hubble 1.19.4` en
 `~/.local/bin` y agregar al env de aks (en los 4 archivos):
 ```
-"PATH": "/home/kiro/.local/bin:/usr/local/bin:/usr/bin:/bin"
+"PATH": "/home/adoadmin/.local/bin:/usr/local/bin:/usr/bin:/bin"
 ```
 (el gateway no hereda `~/.local/bin`).
 
@@ -142,8 +142,8 @@ Resource Graph + ARM REST. Sesión `az login` ya establecida — **nunca ejecuta
   imprimirlo.
 - `Get-CloudflareInventory.ps1` — inventario de cuentas/zonas.
 
-El token debe cargarse al entorno del agente vía `source setup.sh`
-(`kirocrew restart`) + sesión nueva — el proceso del agente no relee
+El token debe estar en `env/.env`
+y el worker gmon-hub se reinicia para tomarlo — el proceso del agente no relee
 `env/.env`/`.bashrc` en caliente.
 
 **El MCP `cloudflare-api` (OAuth) NO es viable en este WSL headless** (solo
@@ -171,7 +171,7 @@ todas `active`. `gmontecristo.com` es la única Enterprise; las otras 19 Free.
 - WSL2 sin interop Windows (`powershell.exe` da `Exec format error`) y sin
   display server. El clipboard de Linux no cruza a Windows.
 - El guard de KiroCrew bloquea leer por shell los paths de config MCP y
-  credenciales (`~/.kiro/agents/*`, `~/.aws/*`, `.env`); usar herramientas
+  credenciales (`~/.cursor/agents/*`, `~/.aws/*`, `.env`); usar herramientas
   dedicadas read/grep/edit, no shell.
-- `kirocrew restart` NO recarga tools de una sesión de chat ya abierta; requiere
+- Reiniciar el worker gmon-hub no recarga un chat ya abierto; requiere
   sesión nueva del dashboard.

@@ -542,13 +542,13 @@ escritura pudo iniciar o completar, se exige readback y una nueva aprobación.
   - documenta la cobertura nueva.
 - `CLAUDE.md`
   - actualiza la regla general del dominio.
-- `.claude/skills/manage-azure-devops-pipelines/SKILL.md`
+- `.cursor/skills/manage-azure-devops-pipelines/SKILL.md`
   - define el flujo y el contrato del bloque de autorización.
-- `.claude/rules/azure-devops-pipelines/authorization.md`
+- `.cursor/rules/azure-devops.mdc`
   - actualiza el alcance de la aprobación atómica.
-- `.claude/rules/azure-devops-pipelines/security.md`
+- `.cursor/rules/azure-devops.mdc`
   - documenta las condiciones estrictas de `allow` y el fallback `ask`.
-- `.claude/skills/manage-azure-devops-pipelines/references/approval-matrix.md`
+- `.cursor/skills/manage-azure-devops-pipelines/references/approval-matrix.md`
   - refleja la nueva matriz de aprobación.
 - `.claude/skills/manage-azure-devops-pipelines/scripts/Apply-AdoClassicPlan.ps1`
   - actualiza únicamente la descripción de cómo se obtiene la aprobación.
@@ -571,7 +571,7 @@ escritura pudo iniciar o completar, se exige readback y una nueva aprobación.
   - ordena ejecutar `.ps1` directamente con `PowerShell`;
   - reemplaza one-liners por `Read`/`Grep`/`Edit`/`Write`;
   - prohíbe modificar el plan después de su aprobación.
-- `.claude/skills/manage-azure-devops-pipelines/SKILL.md`
+- `.cursor/skills/manage-azure-devops-pipelines/SKILL.md`
   - documenta el enrutamiento de herramientas y el alcance del allowlist;
   - aclara que `Apply`, REST directo y permisos globales no forman parte de
     la excepción.
@@ -593,13 +593,13 @@ escritura pudo iniciar o completar, se exige readback y una nueva aprobación.
   - establece que el builder solo prepara y la sesión principal aprueba,
     aplica y verifica;
   - documenta que la aprobación no se hereda entre transcripts.
-- `.claude/skills/manage-azure-devops-pipelines/SKILL.md`
+- `.cursor/skills/manage-azure-devops-pipelines/SKILL.md`
   - incorpora el propietario único de la aprobación y la forma exacta de
     invocación;
   - aclara que el bloque autoriza cada comando enumerado mientras sus hashes y
     el journal permanezcan dentro del alcance aprobado.
-- `.claude/rules/azure-devops-pipelines/authorization.md` y
-  `.claude/skills/manage-azure-devops-pipelines/references/approval-matrix.md`
+- `.cursor/rules/azure-devops.mdc` y
+  `.cursor/skills/manage-azure-devops-pipelines/references/approval-matrix.md`
   - alinean la aprobación atómica con creación o actualización completa de
     definiciones, incluidos triggers/filtros/aprobadores enumerados;
   - mantienen separadas ejecuciones, despliegues, borrados y recursos
@@ -639,7 +639,7 @@ por la prueba real posterior descrita en la cuarta etapa.
   - agrega 13 casos de regresión para comandos observados y evasiones.
 - `.claude/hooks/azure-devops-pipelines/tests/README.md`
   - documenta el contrato y que las pruebas no ejecutan los comandos.
-- `.claude/skills/manage-azure-devops-pipelines/SKILL.md`
+- `.cursor/skills/manage-azure-devops-pipelines/SKILL.md`
   - documenta el fallback seguro ante el defecto del matcher Windows.
 - `.claude/settings.local.json`
   - no se limpió ni se reescribió; las 74 reglas históricas se preservaron para

@@ -1,6 +1,6 @@
 ---
 name: manage-cloudflare
-description: "Administra Cloudflare via MCP oficial y API REST: DNS, WAF, Workers, Pages, Zero Trust, Tunnels, SSL, Cache, Rulesets, KV, R2, D1 y Load Balancing. Triggers: cloudflare, dns, waf, workers, pages, zero trust, tunnel, ssl, cache, ruleset."
+description: Administra Cloudflare via MCP oficial y API REST: DNS, WAF, Workers, Pages, Zero Trust, Tunnels, SSL, Cache, Rulesets, KV, R2, D1 y Load Balancing.
 triggers: [cloudflare, dns, waf, workers, pages, zero trust, tunnel, ssl, cache, ruleset]
 always: false
 ---
@@ -20,10 +20,10 @@ toda eliminación —incluida la eliminación lógica por efecto (purga de
 cache, reemplazo de Ruleset que remueve reglas, desvincular un binding,
 revocar un token, `terraform destroy`, `wrangler delete`)— exige siempre
 su propia aprobación separada; nada queda prohibido de forma permanente
-salvo lo listado en `.kiro/steering/cloudflare/security.md` § Prohibido
+salvo lo listado en `.cursor/rules/cloudflare/security.md` § Prohibido
 permanentemente — un endpoint, comando o tool MCP no reconocido siempre
 resuelve a "preguntar", nunca a "denegar". Ver detalle completo en
-`.kiro/steering/cloudflare/authorization.md` y `security.md`.
+`.cursor/rules/cloudflare/authorization.md` y `security.md`.
 
 ## Estado del MCP oficial `cloudflare-api`
 
@@ -117,13 +117,13 @@ usuario — referenciarlas por ruta.
 
 `inventory/`, `plans/`, `delete-plans/`, `backups/` (respaldo pre-delete),
 `executions/` (journal de aplicación), `reports/`, `logs/`. Ver
-`.kiro/steering/cloudflare/security.md` § Archivos locales para el estado
+`.cursor/rules/cloudflare/security.md` § Archivos locales para el estado
 pendiente de aprobación del `.gitignore`.
 
 ## Fuentes de verdad de este dominio
 
-- Autorización y seguridad: `.kiro/steering/cloudflare/authorization.md` y
-  `.kiro/steering/cloudflare/security.md`.
+- Autorización y seguridad: `.cursor/rules/cloudflare/authorization.md` y
+  `.cursor/rules/cloudflare/security.md`.
 - Arquitectura completa: `docs/cloudflare/CLOUDFLARE-AUTOMATION-ARCHITECTURE.md`.
 - Especificación original: `INSTRUCCIONES-AUTOMATIZACION-CLOUDFLARE.md`
   (raíz del proyecto).

@@ -13,9 +13,11 @@ Administra el plano de control de Microsoft Azure vía ARM: tenants, suscripcion
 ## Conexión
 
 - Azure CLI (`az`) usando la sesión de `az login` ya establecida — **nunca ejecutar `az login`/`az logout`/`az account clear`** desde este flujo.
+- **Acceso permanente del agente vía Managed Identity (sin secreto, desde la VM del hub `gmon-hub-linuxvm-eastus2-0001`):** el agente NO depende de un `az login` interactivo. El `setup.sh` paso `[8/8]` hace `az login --identity --client-id "$KIRO_AZURE_MI_CLIENT_ID"` en cada arranque (fallback al Service Principal `AZURE_CLIENT_*` si la MI no está). La MI es user-assigned `id-kiro-agent-hub` (clientId `689b038a-9e4c-490f-99cf-886eb89a4870`), con scope mínimo: `Azure Kubernetes Service Cluster User Role` sobre el AKS 0001 + `Network Contributor` sobre la NSG `PRODAKS1_Rule` (abrir/cerrar el acceso al API server privado). Si `az account show` da "Please run az login", re-loguear con `az login --identity --client-id "$KIRO_AZURE_MI_CLIENT_ID"` (sintaxis vigente: `--client-id`, NO `--username`). Solo funciona desde esa VM. Setup/verificación/rollback: `docs/azure/MANAGED-IDENTITY-AGENTE-HUB.md`.
 - Azure Resource Graph (`az graph query`) para inventarios amplios.
 - `az rest` como ARM REST controlado.
 - **El MCP oficial `azure` (`@azure/mcp`) está diferido** (pendiente versión estable). El dominio funciona 100% con az CLI; no asumir que el MCP existe.
+- **Consulta de documentación oficial Microsoft/Azure:** usar la CLI `mslearn` (`npx -y @microsoft/learn-cli <cmd>`, sin instalar) para traer doc canónica de Microsoft Learn en diagnósticos: `search "<tema>"` (docs), `code-search "<tema>" --language <lang>` (ejemplos), `fetch "<url>"` (página completa). Preferirla sobre `web_search`/`web_fetch` genéricos cuando se necesita la fuente oficial de un servicio Azure/AKS. Nota: pide Node ≥22 y este host corre Node 20 → imprime `EBADENGINE` pero funciona igual (confirmado 2026-10-02). Es solo consulta de lectura; NO reemplaza `az` CLI para operar.
 - Suscripción activa predeterminada: `Hospital Metropolitano` (`69dc43ec-5f24-4203-9239-a8d0f8506d44`), tenant `Grupo Montecristo` (`33dd4184-3068-47da-891d-a70e02f8c0c9`).
 
 ## Flujo de operaciones
@@ -43,3 +45,6 @@ New-AzureChangePlan.ps1 → Test-AzureChangePlan.ps1 → [aprobación] → Apply
 - Skill: `.cursor/skills/manage-azure-resources/SKILL.md`
 - Docs: `docs/azure/AZURE-AUTOMATION-ARCHITECTURE.md`
 - FinOps: `.cursor/skills/analyze-azure-costs/SKILL.md`, `INSTRUCCIONES-SUBAGENTE-AZURE-FINOPS.md`
+- Referencia Cost Query/Forecast + ARG huérfanos (bodies, dimensiones, queries): `docs/azure/FINOPS-COST-QUERY-FORECAST-REFERENCE.md`
+- Referencia KQL/ARG de diagnóstico (resource health, provisioning): `docs/azure/KQL-ARG-DIAGNOSTICS-REFERENCE.md`
+- Diagramas de arquitectura de un Resource Group (inventario `az` → Mermaid por capas, cross-RG, solo lectura): `docs/azure/RESOURCE-GROUP-ARCHITECTURE-DIAGRAMS.md`

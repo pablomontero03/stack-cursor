@@ -1,11 +1,18 @@
 ---
 name: manage-windows-servers
-description: "Administra de forma controlada via WinRM/PowerShell Remoting cualquier servidor Windows del catalogo docs/servers/windows/servers.json: mantenimiento del SO, aplicativos, IIS, servicios y reinicio controlado. Triggers: windows, server, iis, powershell, event log, windows service."
+description: Administra de forma controlada via WinRM/PowerShell Remoting cualquier servidor Windows del catalogo docs/servers/windows/servers.json: mantenimiento del SO, aplicativos, IIS, servicios y reinicio controlado.
 triggers: [windows, server, iis, powershell, event log, windows service]
 always: false
 ---
 
 # Manage Windows Servers
+
+> **Estado de madurez (Fase 3 — declarado 2026-09-11):** este dominio opera
+> como **guía de análisis y operación asistida**, no como dominio con maquinaria
+> plan/apply/test automatizada. Los agentes `windows-server-diagnoser` y
+> `windows-server-reviewer` trabajan sobre salidas ya obtenidas y no ejecutan
+> comandos en los servidores directamente. Para ampliar a maquinaria completa,
+> seguir el patrón de los dominios maduros. Esta decisión es intencional.
 
 ## Por qué existe este skill
 
@@ -50,9 +57,9 @@ Antes de operar cualquiera de los Modos siguientes:
 
 Leer además según el modo:
 
-- `.kiro/steering/windows-servers/authorization.md` cuando haya duda
+- `.cursor/rules/windows-servers/authorization.md` cuando haya duda
   sobre si una acción concreta necesita aprobación.
-- `.kiro/steering/windows-servers/security.md` antes de leer cualquier
+- `.cursor/rules/windows-servers/security.md` antes de leer cualquier
   archivo de configuración, variable de entorno o log que pudiera
   contener secretos, y para el manejo de la contraseña de conexión.
 

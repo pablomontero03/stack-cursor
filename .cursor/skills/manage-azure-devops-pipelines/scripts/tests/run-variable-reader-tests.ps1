@@ -79,12 +79,12 @@ try {
         -Pass (($groupIds -join ',') -eq '12,13,14') `
         -Detail ($groupIds -join ',')
 
-    $normalOutput = & powershell -NoProfile -File $readerPath -Kind LocalFile -CredentialFile $fakeCredentialFile 2>&1 | Out-String
+    $normalOutput = & pwsh -NoProfile -File $readerPath -Kind LocalFile -CredentialFile $fakeCredentialFile 2>&1 | Out-String
     Add-TestResult -Name 'E2E LocalFile normal: la salida no contiene ningun valor ficticio' `
         -Pass ($normalOutput -notmatch [regex]::Escape($fakeToken) -and $normalOutput -notmatch [regex]::Escape($fakePassword)) `
         -Detail 'sin valores en stdout'
 
-    $revealOutput = & powershell -NoProfile -File $readerPath -Kind LocalFile -CredentialFile $fakeCredentialFile -RevealLocalSecrets 2>&1 | Out-String
+    $revealOutput = & pwsh -NoProfile -File $readerPath -Kind LocalFile -CredentialFile $fakeCredentialFile -RevealLocalSecrets 2>&1 | Out-String
     Add-TestResult -Name 'E2E LocalFile reveal: muestra password ficticio y sigue ocultando token ficticio' `
         -Pass ($revealOutput -match [regex]::Escape($fakePassword) -and $revealOutput -notmatch [regex]::Escape($fakeToken)) `
         -Detail 'revelacion selectiva correcta'

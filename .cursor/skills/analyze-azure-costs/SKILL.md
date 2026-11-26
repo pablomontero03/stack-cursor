@@ -1,6 +1,6 @@
 ---
 name: analyze-azure-costs
-description: "Analisis FinOps de la suscripcion Azure Hospital Metropolitano: costos, consumo, anomalias, tendencias, pronosticos y oportunidades de optimizacion de cualquier servicio Azure. Triggers: costos, finops, cost management, presupuesto, optimizacion, billing, azure costs."
+description: Analisis FinOps de la suscripcion Azure Hospital Metropolitano: costos, consumo, anomalias, tendencias, pronosticos y oportunidades de optimizacion de cualquier servicio Azure.
 triggers: [costos, finops, cost management, presupuesto, optimizacion, billing, azure costs]
 always: false
 ---
@@ -11,7 +11,7 @@ Sub-skill del dominio Azure general (`manage-azure-resources`) — reusa su
 `Azure-Common.ps1`, su mecanismo de plan/aprobacion, sus agentes
 `azure-operator`/`azure-reviewer`, y su hook `azure-security-gate.ps1`
 (ampliado con una excepcion narrow para Cost Management, ver
-`.kiro/steering/azure/security.md`). No duplica ninguno de esos
+`.cursor/rules/azure/security.md`). No duplica ninguno de esos
 mecanismos.
 
 ## Alcance
@@ -92,7 +92,7 @@ token ni secreto). No se escriben datos financieros descargados en
 ## Modelo de aprobación
 
 Igual criterio que `manage-azure-resources` (ver
-`.kiro/steering/azure/authorization.md`), con estas precisiones FinOps:
+`.cursor/rules/azure/authorization.md`), con estas precisiones FinOps:
 
 - **Sin aprobación**: consultas de costo/forecast, Resource Graph,
   métricas de Monitor, recomendaciones de Advisor ya existentes,
@@ -116,16 +116,19 @@ Igual criterio que `manage-azure-resources` (ver
 (query|forecast)` con un `--body` inline cuyas claves están todas en el
 set permitido se clasifica como lectura automática — ver
 `Test-AzureCostManagementReadOnlyRestPost` en
-`.kiro/hooks/azure/azure-security-gate.ps1` y
-`.kiro/steering/azure/security.md` § Caso especial. Cualquier otra
+`.cursor/hooks/azure/azure-security-gate.ps1` y
+`.cursor/rules/azure/security.md` § Caso especial. Cualquier otra
 suscripción, ruta, o clave de body desconocida sigue preguntando —
 nunca se asume lectura sin poder verificar el esquema exacto.
 
 ## Fuentes de verdad
 
 - Autorización y seguridad del dominio general:
-  `.kiro/steering/azure/authorization.md` y `.kiro/steering/azure/security.md`.
+  `.cursor/rules/azure/authorization.md` y `.cursor/rules/azure/security.md`.
 - Arquitectura: `docs/azure/AZURE-AUTOMATION-ARCHITECTURE.md` §
   Azure FinOps.
 - Especificación original: `INSTRUCCIONES-SUBAGENTE-AZURE-FINOPS.md`
   (raíz del proyecto).
+- Referencia operativa Cost Query/Forecast (bodies `az rest`, dimensiones válidas,
+  timeframes) + checklist ARG de recursos huérfanos y Advisor de costo:
+  `docs/azure/FINOPS-COST-QUERY-FORECAST-REFERENCE.md`.

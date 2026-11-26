@@ -11,6 +11,28 @@
       "hostnameReal": "SRV-PRTG",
       "purpose": "Agente de Azure DevOps para builds Windows (hostname real SRV-PRTG sugiere posible instalacion previa o paralela de PRTG, sin confirmar todavia)",
       "docFile": "docs/servers/windows/172.16.2.127.md"
+    },
+    {
+      "id": "172.16.2.76",
+      "host": "172.16.2.76",
+      "port": 5985,
+      "user": "eprac",
+      "authMethod": "WinRM NTLM/Negotiate sobre HTTP (5985); credenciales en env/.env CRSRVSISRDP_76_*",
+      "enabled": true,
+      "hostnameReal": "CRSRVSISRDP",
+      "purpose": "Windows Server con IIS: eFlow (sitios cca/ccaapi:443) y destino de migracion del API any2cloud. Sale a internet por el borde 190.113.100.74 (compartido con el cluster .31)",
+      "docFile": "docs/servers/windows/172.16.2.76.md"
+    },
+    {
+      "id": "172.16.16.243",
+      "host": "172.16.16.243",
+      "port": 5985,
+      "user": "administrator.MCCL",
+      "authMethod": "Sin credencial registrada en el stack todavia (segmento UAT 172.16.16.x no ruteado desde el hub). Validaciones se corren en el propio server (PowerShell) o desde PC externa. Si se registra, poner credenciales SOLO en env/.env patron SRVUATRJ_243_*",
+      "enabled": true,
+      "hostnameReal": "SRV-UAT-RJ",
+      "purpose": "Windows Server con IIS: QA de any2cloud/APIBOT. Publicado por internet via DNS-only api-bot-qa-any2cloud.gmontecristo.com -> 190.171.118.98 (egress UAT Telecable) con NAT 190.171.118.98:443 -> 172.16.16.243:443. Binding IIS SNI estricto por hostname con cert *.grupomontecristo.com. Segmento UAT, no alcanzable desde el hub del agente",
+      "docFile": "docs/servers/windows/172.16.16.243.md"
     }
   ]
 }

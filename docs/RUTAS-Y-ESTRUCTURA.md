@@ -1,3 +1,5 @@
+> En Cursor este árbol no se usa. Las rutas de trabajo son `.cursor/rules/`, `.cursor/skills/`, `.cursor/agents/`, `.cursor/memories/`, `.cursor/mcp.json` y `.local/sesiones-kiro/`. Lo de abajo es el mapa viejo de Kiro Crew.
+
 # Rutas y estructura del setup Kiro Crew
 
 Referencia completa de todos los archivos y carpetas relevantes del setup.
@@ -165,39 +167,28 @@ C:\Users\pablo\
 
 ---
 
-## Los 4 archivos MCP (mantener sincronizados)
+## Archivos MCP en Cursor
 
-Cuando se actualiza la config de un MCP, hay que actualizarlos **todos**:
+Hay dos copias y hay que mantenerlas iguales:
 
 ```
-1. ~/proyectos/repositorios/automation-kiro/.kiro/settings/mcp.json   ← repo
-2. ~/.kiro/settings/mcp.json                                            ← global kiro-cli
-3. ~/.kiro/crew/mcp.json                                                ← Crew
-4. ~/.kiro/agents/kirocrew.json                                         ← auto-generado
+1. /home/cursor/stack-cursor/.cursor/mcp.json   ← la del repo
+2. /home/adoadmin/.cursor/mcp.json              ← la que carga el worker gmon-hub
 ```
 
-Después de cambiar 1-3:
-```bash
-kirocrew setup --agent-only    # regenera el kirocrew.json (archivo 4)
-kirocrew restart               # recarga el gateway
-# Abrir sesión NUEVA en el dashboard (las sesiones abiertas no recargan tools)
-```
+Después de cambiarlas, reiniciar el worker gmon-hub y abrir un chat nuevo. Un chat ya abierto no recarga los tools.
 
 ---
 
 ## Comandos clave
 
 ```bash
-# Reiniciar el gateway (el más usado)
-kirocrew restart
-# → imprime las URLs con token directamente
+# Variables
+set -a; source /home/cursor/stack-cursor/env/.env; set +a
 
-# Estado
-kirocrew status
-kirocrew doctor
-
-# Cambiar de proyecto en el chat
-"ve a /home/kiro/proyectos/repositorios/buklo-framework"
+# Setup de esta máquina
+cd /home/cursor/stack-cursor
+./setup-cursor.sh
 
 # Ver/cambiar contexto de kubectl
 kubectl config get-contexts
@@ -207,11 +198,6 @@ kubectl config use-context gmon-prod-aks-eastus2-0004
 # Suscripción activa de Azure
 az account show --query name -o tsv
 az account set --subscription "Hospital Metropolitano"
-
-# Bootstrap completo (nueva máquina o setup inicial)
-cd ~/proyectos/repositorios/automation-kiro
-cp env/.env.example env/.env    # completar con valores reales
-bash setup.sh
 ```
 
 ---

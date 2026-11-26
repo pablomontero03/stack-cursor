@@ -1,5 +1,9 @@
 # Instrucciones para montar la administración de permisos de Azure DevOps
 
+> **⚠️ Documento histórico (era Claude Code, 2026-08).** Las rutas corresponden
+> al entorno Claude Code anterior (`D:\Proyectos\`, `.claude/rules/`).
+> En Kiro, las rutas equivalentes son `.cursor/skills/` y `.cursor/rules/`.
+
 Trabaja sobre el proyecto real ubicado en:
 
 `D:\Proyectos\automation`
@@ -36,7 +40,7 @@ componentes:
 
 - `.claude/skills/manage-azure-devops-pipelines/`
 - `.claude/hooks/azure-devops-pipelines/`
-- `.claude/rules/azure-devops-pipelines/`
+- `.cursor/rules/azure-devops.mdc`
 - `.claude/agents/azure-devops/ado-pipeline-*.md`
 - `.claude/agent-memory/ado-pipeline-*/`
 - `.local/azure-devops/`

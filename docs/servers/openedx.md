@@ -1,7 +1,7 @@
 # Servidor openedx (135.119.204.153)
 
 Fuente de verdad operativa para este servidor, gestionado por
-`.kiro/skills/manage-linux-servers/SKILL.md`. No contiene contraseñas,
+`.cursor/skills/manage-linux-servers/SKILL.md`. No contiene contraseñas,
 tokens ni ningún secreto — solo inventario, checklists y hallazgos
 sanitizados.
 
@@ -31,7 +31,7 @@ servidores de este dominio, la clave privada de `openedx` vive en
 `%USERPROFILE%\.ssh\`. El usuario decidió explícitamente dejarla ahí. El
 archivo está sin trackear por git (`??`) pero el `.gitignore` del repo no
 excluye nada — riesgo conocido, no corregido automáticamente por decisión
-del usuario. Ver `.kiro/steering/linux-servers/security.md`.
+del usuario. Ver `.cursor/rules/linux-servers/security.md`.
 
 ## Servicios conocidos
 
@@ -42,7 +42,7 @@ del usuario. Ver `.kiro/steering/linux-servers/security.md`.
 
 ## Comandos permitidos de diagnóstico
 
-Ver Modo 2 y Modo 3 de `.kiro/skills/manage-linux-servers/SKILL.md`.
+Ver Modo 2 y Modo 3 de `.cursor/skills/manage-linux-servers/SKILL.md`.
 Open edX moderno suele desplegarse con Tutor sobre Docker — confirmar con
 `docker ps`/`docker compose ls` antes de asumir la forma de despliegue.
 
@@ -54,7 +54,7 @@ Open edX moderno suele desplegarse con Tutor sobre Docker — confirmar con
 - Nunca se ejecuta ninguna de las acciones de la lista de "Prohibido
   permanentemente" del skill, bajo ninguna circunstancia.
 - No se asume acceso sudo para el usuario `adminedx`.
-- Ver `.kiro/steering/linux-servers/authorization.md` para el detalle
+- Ver `.cursor/rules/linux-servers/authorization.md` para el detalle
   completo de qué requiere aprobación.
 
 ## Checklist de conexión (Modo 1)
@@ -77,3 +77,10 @@ Open edX moderno suele desplegarse con Tutor sobre Docker — confirmar con
 | Fecha | Hallazgo |
 |---|---|
 | 2026-09-08 | Conexión SSH por llave confirmada (clave preexistente en `env/keyopenedx.pem`). Hostname real: `VM`. Ubuntu 20.04, kernel Azure `5.15.0-1089-azure`. |
+
+
+### 2026-11-12 — Incidente de confusión prod/dev (limpieza en PRODUCCIÓN por error)
+- `135.119.204.153` = `vm-openEdx`, RG `OPENEDX`, IP privada `10.0.0.6`: **es PRODUCCIÓN**. Se tomó por la VM dev (`vm-openEdx-dev`) y se ejecutó ahí una limpieza.
+- Acciones realizadas en prod: `truncate -s 0` de 11 `*-json.log` de contenedores Docker >100 MB (≈18 GB de logs históricos, irrecuperables) y `journalctl --vacuum-size=500M` (liberó 0 B). `/` pasó de 83% (103G usados) a 66% (81G). Los 11 contenedores `tutor_local-*` siguieron arriba, sin reinicios. No se tocaron datos, imágenes ni volúmenes.
+- Medición previa de prod: `/` 124G, `/mnt` 196G (186G libres, disco temporal Azure). Mayores consumos: `/var/lib/docker` 60G (overlay2 41G, logs 19G), `~/.local/share/tutor/data` 30G (MongoDB 15G, LMS 13G).
+- Pendiente recomendado en prod: rotación de logs Docker (`max-size`/`max-file` en daemon.json, requiere recrear contenedores en ventana) y `SystemMaxUse` en journald.

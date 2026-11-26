@@ -36,7 +36,7 @@ otra eliminación.
 - Cualquier endpoint que devuelva material criptográfico privado.
 
 Nunca se guarda una clave privada en un respaldo, plan, inventario, log ni
-memoria de agente (ver `.claude/rules/cloudflare/security.md`).
+memoria de agente (ver `.cursor/rules/cloudflare.mdc`).
 
 ## Resolución determinista de un registro (`Resolve-CloudflareDnsRecord.ps1`)
 

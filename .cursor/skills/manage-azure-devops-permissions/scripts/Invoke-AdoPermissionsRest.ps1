@@ -370,7 +370,8 @@ function Test-AdoPermissionsValueIsCollectionCompatible {
 # propio y sin compartir codigo.
 # ============================================================
 
-$script:AdoPermissionsProductionExecutionsDir = '$env:REPO_ROOT\.local\azure-devops-permissions\executions'
+$script:AdoPermissionsRepoRoot = if (-not [string]::IsNullOrWhiteSpace($env:REPO_ROOT)) { $env:REPO_ROOT } else { (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..')).Path }
+$script:AdoPermissionsProductionExecutionsDir = Join-Path $script:AdoPermissionsRepoRoot '.local' 'azure-devops-permissions' 'executions'
 
 function Get-AdoPermissionsExecutionsDir {
     <#
@@ -1031,18 +1032,37 @@ function Get-AdoPermissionsMatrixDefinition {
     $allRepositories = [ordered]@{
         'Advanced Security: manage and dismiss alerts'              = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
         'Advanced Security: manage settings'                        = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
-        'Advanced Security: view alerts'                            = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
+        'Advanced Security: view alerts'                            = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Allow' }
         'Bypass policies when completing pull requests'             = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
         'Bypass policies when pushing'                              = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
-        'Contribute'                                                = [ordered]@{ DevelopmentTeam = 'Allow'; CodeReviewers = 'Allow' }
+        'Contribute'                                                = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Allow' }
+        # 2026-09-18: Development Team pasa de Deny a Allow en 'Contribute
+        # to pull requests' (PullRequestContribute, bit 16384). El dev
+        # trabaja en feature/* y DEBE poder CREAR el PR hacia development;
+        # el Deny anterior lo bloqueaba con TF401027 'You need the Git
+        # PullRequestContribute permission' (caso real dguitierreza en
+        # CORE-PLT/buklo-web). Sigue SIN push directo: 'Contribute' (bit 4)
+        # permanece Deny, y development/uat/release/main deniegan Contribute
+        # por rama. Crear un PR != mergear un PR; completar el PR sigue
+        # siendo del Code-Reviewer. La copia humana permission-matrix.md ya
+        # declaraba Allow: este cambio alinea el codigo ejecutable a ese
+        # diseno (divergencia real encontrada 2026-09-18).
         'Contribute to pull requests'                               = [ordered]@{ DevelopmentTeam = 'Allow'; CodeReviewers = 'Allow' }
+        # 2026-09-18: Development Team pasa de Deny a Allow en 'Create
+        # branch' (CreateBranch, bit 16). Confirmado por prueba en vivo del
+        # usuario: para abrir el PR desde feature/* el dev necesita, ademas
+        # de PullRequestContribute, poder crear la rama en el repo (el flujo
+        # de PR crea/actualiza refs). Sin esto el ciclo feature/* -> PR
+        # queda incompleto. Sigue SIN push directo a ramas protegidas:
+        # 'Contribute' (bit 4) permanece Deny y development/uat/release/main
+        # deniegan Contribute por rama.
         'Create branch'                                             = [ordered]@{ DevelopmentTeam = 'Allow'; CodeReviewers = 'Allow' }
         'Create repository'                                         = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
-        'Create tag'                                                = [ordered]@{ DevelopmentTeam = 'Allow'; CodeReviewers = 'Not set' }
+        'Create tag'                                                = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Allow' }
         'Delete or disable repository'                              = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
         'Edit policies'                                             = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
         'Force push (rewrite history, delete branches and tags)'    = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
-        'Manage notes'                                              = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
+        'Manage notes'                                              = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Allow' }
         'Manage permissions'                                        = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
         'Read'                                                      = [ordered]@{ DevelopmentTeam = 'Allow'; CodeReviewers = 'Allow' }
         "Remove others' locks"                                      = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
@@ -1071,7 +1091,7 @@ function Get-AdoPermissionsMatrixDefinition {
         'feature'     = [ordered]@{
             'Bypass policies when completing pull requests'          = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
             'Bypass policies when pushing'                           = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
-            'Contribute'                                             = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
+            'Contribute'                                             = [ordered]@{ DevelopmentTeam = 'Allow'; CodeReviewers = 'Not set' }
             'Edit policies'                                          = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
             'Force push (rewrite history, delete branches and tags)' = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
             'Manage permissions'                                     = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
@@ -1086,7 +1106,15 @@ function Get-AdoPermissionsMatrixDefinition {
             # development se suma a uat/release/main como rama protegida
             # -- todo cambio entra por PR, ninguna excepcion para
             # development.
-            'Contribute'                                             = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
+            # 2026-09-24: Code-Reviewers pasa de 'Not set' a 'Allow' EXPLICITO
+            # en Contribute (bit 4). Motivo: completar (mergear) un PR requiere
+            # Contribute sobre la rama destino, y la herencia desde All
+            # Repositories NO alcanzaba porque un Deny heredado de nivel
+            # superior ganaba (caso real tmora en Buklo/buklo-web PR 13855:
+            # aprobaba pero no veia el boton Complete). El Allow explicito por
+            # rama es el ACE mas especifico y gana sobre el deny heredado.
+            # Development Team sigue en Deny (no completa PRs).
+            'Contribute'                                             = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Allow' }
             'Edit policies'                                          = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
             'Force push (rewrite history, delete branches and tags)' = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
             'Manage permissions'                                     = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
@@ -1095,7 +1123,9 @@ function Get-AdoPermissionsMatrixDefinition {
         'uat'         = [ordered]@{
             'Bypass policies when completing pull requests'          = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
             'Bypass policies when pushing'                           = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
-            'Contribute'                                             = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
+            # 2026-09-24: Allow explicito de Contribute para Code-Reviewers
+            # (mismo motivo que development: poder completar PRs a uat).
+            'Contribute'                                             = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Allow' }
             'Edit policies'                                          = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
             'Force push (rewrite history, delete branches and tags)' = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
             'Manage permissions'                                     = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
@@ -1104,7 +1134,9 @@ function Get-AdoPermissionsMatrixDefinition {
         'release'     = [ordered]@{
             'Bypass policies when completing pull requests'          = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
             'Bypass policies when pushing'                           = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
-            'Contribute'                                             = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Not set' }
+            # 2026-09-24: Allow explicito de Contribute para Code-Reviewers
+            # (mismo motivo que development: poder completar PRs a release).
+            'Contribute'                                             = [ordered]@{ DevelopmentTeam = 'Deny'; CodeReviewers = 'Allow' }
             'Edit policies'                                          = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
             'Force push (rewrite history, delete branches and tags)' = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
             'Manage permissions'                                     = [ordered]@{ DevelopmentTeam = 'Not set'; CodeReviewers = 'Not set' }
@@ -1358,7 +1390,13 @@ function ConvertTo-AdoPermissionsSecurityAceDescriptor {
     )
 
     if ($GraphDescriptor.StartsWith('Microsoft.TeamFoundation.Identity;', [StringComparison]::OrdinalIgnoreCase) -or
-        $GraphDescriptor.StartsWith('Microsoft.TeamFoundation.ServiceIdentity;', [StringComparison]::OrdinalIgnoreCase)) {
+        $GraphDescriptor.StartsWith('Microsoft.TeamFoundation.ServiceIdentity;', [StringComparison]::OrdinalIgnoreCase) -or
+        $GraphDescriptor.StartsWith('Microsoft.IdentityModel.Claims.ClaimsIdentity;', [StringComparison]::OrdinalIgnoreCase)) {
+        # ClaimsIdentity;<tenantId>\<upn> es la forma FINAL con que el
+        # acesDictionary de la API de Security keyea a un usuario AAD
+        # individual (no un grupo). El plan la captura tal cual del ACL
+        # vivo para preservar identidades ajenas; se devuelve sin
+        # modificar, igual que las 2 identidades legadas/servicio.
         return $GraphDescriptor
     }
     if (-not $GraphDescriptor.StartsWith('vssgp.', [StringComparison]::OrdinalIgnoreCase)) {
@@ -1366,9 +1404,19 @@ function ConvertTo-AdoPermissionsSecurityAceDescriptor {
     }
 
     $base64Payload = $GraphDescriptor.Substring(6)
+    # El descriptor de Graph (vssgp....) codifica el SID en Base64
+    # URL-safe SIN padding: usa -/_ en vez de +// y omite los =
+    # finales. [Convert]::FromBase64String NO acepta esa forma (lanza
+    # not a valid Base-64 string). Normalizar a Base64 estandar antes de
+    # decodificar -- confirmado en vivo 2026-09-16 con el grupo
+    # Development teams de Database-Administration-and-Monitoring, cuyo
+    # descriptor real dispara el fallo (el fixture del test 16c
+    # casualmente ya era Base64 estandar y no lo detectaba).
+    $normalized = $base64Payload.Replace('-', '+').Replace('_', '/')
+    switch ($normalized.Length % 4) { 2 { $normalized += '==' } 3 { $normalized += '=' } }
     $sid = $null
     try {
-        $sid = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($base64Payload))
+        $sid = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($normalized))
     }
     catch {
         throw "ConvertTo-AdoPermissionsSecurityAceDescriptor: el payload de '$GraphDescriptor' no es Base64 valido."
@@ -1605,8 +1653,17 @@ function Get-AdoPermissionsReadbackResults {
                             # esta presente.
                             $liveExtendedInfoProp = $liveAce.PSObject.Properties['extendedInfo']
                             if ($liveExtendedInfoProp -and $liveExtendedInfoProp.Value) {
-                                $effAllow = [int]$liveExtendedInfoProp.Value.effectiveAllow
-                                $effDeny = [int]$liveExtendedInfoProp.Value.effectiveDeny
+                                # Acceso defensivo por PSObject.Properties: bajo
+                                # Set-StrictMode -Version Latest, $extendedInfo puede
+                                # existir sin traer effectiveAllow/effectiveDeny (Azure
+                                # DevOps los omite cuando no hay permiso efectivo
+                                # heredado), y el acceso directo lanzaria
+                                # PropertyNotFoundStrict. Confirmado en vivo 2026-09-16
+                                # con DB-Admin: 211 de 264 ACE no traen effectiveDeny.
+                                $effAllowProp = $liveExtendedInfoProp.Value.PSObject.Properties['effectiveAllow']
+                                $effDenyProp = $liveExtendedInfoProp.Value.PSObject.Properties['effectiveDeny']
+                                if ($effAllowProp) { $effAllow = [int]$effAllowProp.Value }
+                                if ($effDenyProp) { $effDeny = [int]$effDenyProp.Value }
                             }
                         }
                         if ($liveAllow -ne [int]$expected.allow -or $liveDeny -ne [int]$expected.deny) {
@@ -1725,7 +1782,24 @@ function Invoke-AdoPermissionsApplyPhases {
                         # eso permitiria intentar la escritura real sin haber
                         # podido verificar nada. Solo se reconoce '(404)' en el
                         # mensaje de la excepcion como el caso seguro de omitir.
-                        $checkUri = "$graphBase/_apis/graph/memberships/$([uri]::EscapeDataString([string]$op.precondition.memberDescriptor))/$([uri]::EscapeDataString([string]$op.precondition.containerDescriptor))?api-version=$($script:AdoPermissionsGraphApiVersion)"
+                        #
+                        # FIX 2026-09-17: el plan generado por New-AdoPermissionsPlan
+                        # puede tener precondition.memberDescriptor / containerDescriptor
+                        # vacios cuando los descriptores estan embebidos directamente
+                        # en la URI del operation (formato alternativo). En ese caso,
+                        # construir el checkUri desde la URI de la operacion, que tiene
+                        # la forma: .../graph/memberships/{memberDesc}/{containerDesc}?...
+                        $memberDesc = [string]$op.precondition.memberDescriptor
+                        $containerDesc = [string]$op.precondition.containerDescriptor
+                        if ([string]::IsNullOrWhiteSpace($memberDesc) -or [string]::IsNullOrWhiteSpace($containerDesc)) {
+                            # Extraer descriptores desde la URI de la operacion
+                            $opUri = [string]$op.uri
+                            if ($opUri -match '/graph/memberships/([^/\?]+)/([^/\?]+)') {
+                                $memberDesc = [uri]::UnescapeDataString($Matches[1])
+                                $containerDesc = [uri]::UnescapeDataString($Matches[2])
+                            }
+                        }
+                        $checkUri = "$graphBase/_apis/graph/memberships/$([uri]::EscapeDataString($memberDesc))/$([uri]::EscapeDataString($containerDesc))?api-version=$($script:AdoPermissionsGraphApiVersion)"
                         try {
                             $checkResult = Invoke-AdoPermissionsRest -Method GET -Uri $checkUri
                             if ($checkResult.StatusCode -ge 200 -and $checkResult.StatusCode -lt 300) {

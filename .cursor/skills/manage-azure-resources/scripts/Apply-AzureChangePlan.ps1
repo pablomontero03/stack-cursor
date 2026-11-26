@@ -4,7 +4,7 @@ UNICO script de esta skill que ejecuta escrituras reales no destructivas
 what-if para que el hook de este dominio pueda pedir permiso explicito por
 el NOMBRE de este script (o reutilizar, dentro de la ventana de 24h, la
 aprobacion visible ya dada en ExitPlanMode -- ver
-.kiro/hooks/azure/azure-plan-authorization.ps1). NUNCA ejecuta
+.cursor/hooks/azure/azure-plan-authorization.ps1). NUNCA ejecuta
 `pendingDeleteOperations` -- eso es exclusivamente Apply-AzureDeletePlan.ps1.
 
 Exige, en orden, o se rechaza sin tocar Azure:

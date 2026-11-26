@@ -4,7 +4,6 @@ description: "Revisa de forma independiente cambios de Schema Sync, SSDT, catál
 tools: fs_read, grep
 model: auto
 ---
-
 Eres un revisor especializado en Azure SQL, SSDT, DacFx, Azure DevOps y n8n.
 
 Trabaja solamente en modo lectura.

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>K8s Dashboard Hub — Grupo Montecristo</title>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --card:    #1a1d2e;
+      --border:  #2a2d3e;
+      --text:    #e2e8f0;
+      --muted:   #6b7280;
+      --ok:      #22c55e;
+      --warn:    #f59e0b;
+      --err:     #ef4444;
+      --prod:    #3b82f6;
+      --dev:     #8b5cf6;
+      --accent:  #0078d4;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', -apple-system, sans-serif; background: var(--bg);
+           color: var(--text); min-height: 100vh; }
+
+    /* ── Header ── */
+    .header { display: flex; align-items: center; gap: 12px; padding: 16px 20px;
+              border-bottom: 1px solid var(--border); background: var(--card); }
+    .header h1 { font-size: 16px; font-weight: 700; }
+    .header .sub { font-size: 12px; color: var(--muted); }
+    .back-btn { display: none; background: none; border: 1px solid var(--border);
+                color: var(--text); padding: 6px 14px; border-radius: 5px;
+                cursor: pointer; font-size: 13px; margin-left: auto; }
+    .back-btn:hover { border-color: var(--accent); color: var(--accent); }
+    #userInfo { font-size: 11px; color: var(--muted); margin-left: auto; }
+
+    /* ── Hub menu ── */
+    #hubView { padding: 20px; }
+    .hub-title { font-size: 13px; color: var(--muted); text-transform: uppercase;
+                 letter-spacing: .06em; margin-bottom: 16px; }
+    .clusters { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+                gap: 12px; }
+    .cluster-card { background: var(--card); border: 1px solid var(--border);
+                    padding: 18px 20px; cursor: pointer; transition: border-color .15s, transform .1s; }
+    .cluster-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .cluster-card:active { transform: translateY(0); }
+    .cluster-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .cluster-name { font-size: 15px; font-weight: 600; }
+    .env-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 3px;
+                 text-transform: uppercase; letter-spacing: .04em; }
+    .env-prod { background: rgba(59,130,246,.15); color: var(--prod); }
+    .env-dev  { background: rgba(139,92,246,.15);  color: var(--dev); }
+    .cluster-desc { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+    .cluster-status { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .status-up         { background: var(--ok); }
+    .status-degraded   { background: var(--warn); }
+    .status-unreachable{ background: var(--err); }
+    .status-checking   { background: var(--muted); animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:1} }
+    .open-link { margin-left: auto; font-size: 11px; color: var(--accent);
+                 text-decoration: none; opacity: .7; }
+    .open-link:hover { opacity: 1; }
+    .refresh-hint { font-size: 11px; color: var(--muted); margin-top: 16px; text-align: center; }
+
+    /* ── Iframe view ── */
+    #iframeView { display: none; height: calc(100vh - 53px); }
+    #clusterFrame { width: 100%; height: 100%; border: none; display: block; }
+    .iframe-loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+                      color: var(--muted); font-size: 14px; pointer-events: none; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <span style="font-size:22px">⎈</span>
+  <div>
+    <h1>Kubernetes Dashboards</h1>
+    <div class="sub" id="headerSub">Grupo Montecristo — selecciona un cluster</div>
+  </div>
+  <button class="back-btn" id="backBtn" onclick="showHub()" style="display:none">← Volver al menú</button>
+  <span id="userInfo"></span>
+</div>
+
+<!-- Menú de clusters -->
+<div id="hubView">
+  <div class="hub-title">Clusters disponibles</div>
+  <div class="clusters" id="clusterGrid">
+    <!-- Generado por JS -->
+  </div>
+  <div class="refresh-hint">Estado actualizado al cargar · <a href="#" onclick="loadClusters();return false;" style="color:var(--accent)">↻ Actualizar</a></div>
+</div>
+
+<!-- Vista iframe del cluster seleccionado -->
+<div id="iframeView" style="display:none; position:relative; height:calc(100vh - 53px)">
+  <iframe id="clusterFrame" src="about:blank" allow="fullscreen"
+    title="Kubernetes Dashboard"
+    style="width:100%;height:100%;border:none;display:block"
+    onload="onFrameLoad(this)"></iframe>
+  <div id="frameAuth" style="display:none;position:absolute;top:50%;left:50%;
+       transform:translate(-50%,-50%);text-align:center;font-family:Segoe UI,sans-serif">
+    <div style="font-size:48px;margin-bottom:16px">🔐</div>
+    <div style="font-size:16px;font-weight:600;color:#1a1a2e;margin-bottom:8px">Autenticación requerida</div>
+    <div style="font-size:13px;color:#555;margin-bottom:20px">
+      Abre el dashboard en una pestaña nueva, inicia sesión,<br>ciérrala y regresa aquí.
+    </div>
+    <button id="authBtn" onclick="openAuth()"
+      style="background:#0078d4;color:#fff;border:none;padding:10px 24px;
+             font-size:14px;cursor:pointer;border-radius:4px">
+      Abrir para autenticarse ↗
+    </button>
+    <div style="margin-top:12px">
+      <button onclick="retryFrame()"
+        style="background:none;border:1px solid #ccc;padding:6px 16px;font-size:13px;cursor:pointer;border-radius:4px">
+        ↻ Reintentar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  var clusters = [];
+
+  // ── User identity (Teams SSO o oauth2-proxy header) ────────────────────────
+  function loadUser() {
+    var token = window.__TEAMS_TOKEN;
+    var url = token ? ('/api/me?token=' + encodeURIComponent(token)) : '/api/me';
+    fetch(url).then(function(r){return r.json();}).then(function(u){
+      if (u.email) {
+        var el = document.getElementById('userInfo');
+        if (el) el.textContent = u.email;
+      }
+    }).catch(function(){});
+  }
+
+  // ── Cargar clusters con estado ─────────────────────────────────────────────
+  function loadClusters() {
+    var grid = document.getElementById('clusterGrid');
+    // Mostrar skeleton con "checking"
+    if (clusters.length) {
+      clusters.forEach(function(c) {
+        var dot = document.getElementById('dot-' + c.id);
+        var lbl = document.getElementById('lbl-' + c.id);
+        if (dot) { dot.className = 'status-dot status-checking'; }
+        if (lbl) { lbl.textContent = 'Verificando...'; }
+      });
+    }
+
+    fetch('/api/clusters').then(function(r){return r.json();}).then(function(data){
+      clusters = data;
+      renderGrid();
+    }).catch(function(){
+      // Render sin estado si falla
+      if (!clusters.length) renderGrid();
+    });
+  }
+
+  function renderGrid() {
+    var grid = document.getElementById('clusterGrid');
+    grid.innerHTML = clusters.map(function(c) {
+      var statusClass = 'status-' + (c.status || 'checking');
+      var statusText = c.status === 'up' ? 'Accesible'
+                     : c.status === 'degraded' ? 'Degradado'
+                     : c.status === 'unreachable' ? 'Sin acceso'
+                     : 'Verificando…';
+      return '<div class="cluster-card" onclick="openCluster(\'' + c.id + '\')">' +
+        '<div class="cluster-top">' +
+          '<span class="cluster-name">' + esc(c.label) + '</span>' +
+          '<span class="env-badge env-' + c.env + '">' + c.env + '</span>' +
+        '</div>' +
+        '<div class="cluster-desc">' + esc(c.description) + '</div>' +
+        '<div class="cluster-status">' +
+          '<div class="status-dot ' + statusClass + '" id="dot-' + c.id + '"></div>' +
+          '<span id="lbl-' + c.id + '">' + statusText + '</span>' +
+          '<a class="open-link" href="' + c.url + '" target="_blank" rel="noopener" ' +
+             'onclick="event.stopPropagation()" title="Abrir en browser">↗</a>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // ── Abrir cluster ─────────────────────────────────────────────────────────
+  function openCluster(id) {
+    var c = clusters.find(function(x){ return x.id === id; });
+    if (!c) return;
+    if (c.embedUrl) {
+      showClusterFrame(c);
+    } else {
+      // Sin embedUrl: abrir en nueva pestaña (cluster no tiene proxy)
+      if (window.__TEAMS_MODE) {
+        try { microsoftTeams.app.openLink(c.url); }
+        catch(e) { window.open(c.url, '_blank', 'noopener'); }
+      } else {
+        window.open(c.url, '_blank', 'noopener');
+      }
+    }
+  }
+
+  function showClusterFrame(c) {
+    currentClusterUrl = c.url;
+    document.getElementById('headerSub').textContent = c.label + ' · ' + c.description;
+    document.getElementById('backBtn').style.display = 'block';
+    document.getElementById('userInfo').style.display = 'none';
+    document.getElementById('hubView').style.display = 'none';
+    document.getElementById('iframeView').style.display = 'block';
+    document.getElementById('frameAuth').style.display = 'none';
+    document.getElementById('clusterFrame').src = c.embedUrl || c.url;
+  }
+
+  function showHub() {
+    document.getElementById('headerSub').textContent = 'Grupo Montecristo — selecciona un cluster';
+    document.getElementById('backBtn').style.display = 'none';
+    document.getElementById('userInfo').style.display = '';
+    document.getElementById('hubView').style.display = 'block';
+    document.getElementById('iframeView').style.display = 'none';
+    document.getElementById('clusterFrame').src = 'about:blank';
+  }
+
+  function showClusterFrame(c) {
+    currentClusterUrl = c.url;
+    document.getElementById('headerSub').textContent = c.label + ' · ' + c.description;
+    document.getElementById('backBtn').style.display = 'block';
+    document.getElementById('userInfo').style.display = 'none';
+    document.getElementById('hubView').style.display = 'none';
+    document.getElementById('iframeView').style.display = 'block';
+    document.getElementById('frameAuth').style.display = 'none';
+    // Use embedUrl (public /teams-tab) for iframe, url for direct link
+    document.getElementById('clusterFrame').src = c.embedUrl || c.url;
+  }
+
+  function showHub() {
+    document.getElementById('headerSub').textContent = 'Grupo Montecristo — selecciona un cluster';
+    document.getElementById('backBtn').style.display = 'none';
+    document.getElementById('userInfo').style.display = '';
+    document.getElementById('hubView').style.display = 'block';
+    document.getElementById('iframeView').style.display = 'none';
+    document.getElementById('clusterFrame').src = 'about:blank';
+    document.getElementById('frameAuth').style.display = 'none';
+  }
+
+  var currentClusterUrl = '';
+
+  function onFrameLoad(frame) {
+    // Detect if iframe ended up on a login page (different origin blocks access,
+    // but we can check if contentDocument is accessible or if it's blank)
+    try {
+      var loc = frame.contentWindow.location.href;
+      if (loc && (loc.indexOf('login.microsoftonline') >= 0 || loc === 'about:blank')) {
+        document.getElementById('frameAuth').style.display = 'block';
+      } else {
+        document.getElementById('frameAuth').style.display = 'none';
+      }
+    } catch(e) {
+      // Cross-origin - frame loaded something, hide auth overlay
+      document.getElementById('frameAuth').style.display = 'none';
+    }
+  }
+
+  function openAuth() {
+    if (currentClusterUrl) window.open(currentClusterUrl, '_blank', 'noopener');
+  }
+
+  function retryFrame() {
+    document.getElementById('frameAuth').style.display = 'none';
+    var f = document.getElementById('clusterFrame');
+    var src = f.src;
+    f.src = 'about:blank';
+    setTimeout(function(){ f.src = src; }, 200);
+  }
+
+  function esc(s) {
+    return String(s||'').replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  // ── Startup ────────────────────────────────────────────────────────────────
+  loadUser();
+  loadClusters();
+</script>
+</body>
+</html>

@@ -514,3 +514,20 @@ dotnet publish -c Release -r linux-x64 --self-contained true -o ..\publish\linux
 ---
 
 *Este documento es el contexto acumulado del trabajo de schema-sync y repos SSDT. Para comandos cortos del día a día, ver `README.md`.*
+
+
+---
+
+## Nota de estado 2026-11-09 — dos orquestadores activos
+
+Esta nota se agrega sin modificar lo anterior. Donde el texto histórico dice que el orquestador está "inactivo" o con `do_not_auto_run=true`, prevalece lo siguiente (verificado en vivo en `n8n-interno`):
+
+- `ScHmSyNcOrCh0001` (núcleo): activo, `do_not_auto_run=false`, Dom–Vie 19:00 CR, 21 de 22 bases enabled (falta `sqldb_da_global`).
+- `F9RXPgIJQ7QzZ15q` (negocio + staging, "orquestador 2"): creado el 2026-11-04 como clon del 0001, activado el 2026-11-09, `do_not_auto_run=false`, Dom–Vie 20:30 CR, 18 de 28 bases enabled.
+- Ambos deben mantenerse en espejo: todo cambio de grafo o lógica va a los dos, con respaldo previo en `.local/schema-sync/backups/`.
+- Pilotos del 2026-11-04 (flujo 2): 27 repos verificados con `.sqlproj`; 18 pasaron con `status=success` y `buildOk=true`.
+- Fallos pendientes (enabled=false): build SSDT en `int_medica`, `int_nomedica`, `stg_iolab`; drift BD↔repo en `database_maintenance`, `gm_cotizadores`, `pre_stage`, `sds_salesforce`.
+- Bases heavy inactivas: `stg_hana`, `stg_hana_nomed`, `SOFTLAND`. El Compare live tarda más de 40 min por base y el wrapper CLI de n8n crasheó (~65 min) abortando la cola; requieren vía DACPAC con CommandTimeout alto.
+- Repos sin proyecto SSDT, fuera del catálogo: `dw_eflow`, `eflow_sislocar`, `rj_coyol`.
+- `schema-sync/databases.json` no existe en el checkout; hoy la fuente efectiva del catálogo es el nodo `Set - Params` de cada workflow.
+- Procedimiento vigente: `schema-sync/README.md`, sección "Orquestador multi-BD".

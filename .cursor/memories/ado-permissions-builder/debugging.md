@@ -1,4 +1,39 @@
-# Diagnóstico — ado-permissions-builder
+
+## validationHash mismatch: Test hashea en memoria, Apply relee de disco (2026-09-16)
+
+**Síntoma**: `Test-AdoPermissionsPlan.ps1` reporta "Plan VALIDO" y escribe
+un `validationHash`, pero `Apply-AdoPermissionsPlan.ps1` lo rechaza con
+"el plan cambio despues de validarse (validationHash no coincide)", aunque
+NADIE tocó el archivo entre Test y Apply.
+
+**Causa raíz confirmada**: Test calculaba `validationHash` sobre el objeto
+`$plan` EN MEMORIA y luego lo escribía con `ConvertTo-Json | Set-Content`.
+`ConvertTo-Json`/`ConvertFrom-Json` coercionan tipos, así que el objeto
+re-parseado desde disco (lo que Apply hashea) difiere del objeto en
+memoria. El campo culpable fue `validationEvidence.validatedAtUtc`: se
+generaba como string ISO-8601 `'o'` (`2026-09-16T23:41:44.479599Z`) y se
+hasheaba así en memoria, pero al serializar, PowerShell lo reinterpreta
+como `[DateTime]` y lo re-emite en formato corto de cultura
+(`09/16/2026 23:41:44`), perdiendo sub-segundos. `Get-AdoPermissionsPlanCanonicalHash`
+solo ordena las claves de NIVEL SUPERIOR; no protege contra la coerción de
+tipos anidados. NO era truncamiento por `-Depth 20` (verificado: depth 20
+== depth 50) ni orden no-determinista de claves (el hash de disco es
+estable entre lecturas). Mismo dominio de bug que el de timestamps en
+`Test/Apply-AdoClassicPlan` de Pipelines.
+
+**Solución aplicada**: en `Test-AdoPermissionsPlan.ps1`, calcular el
+`validationHash` sobre el plan ya SERIALIZADO Y RE-PARSEADO (escribir a
+disco primero sin hash, releer, hashear el objeto reparseado, recién ahí
+persistir el hash). Garantiza que Test y Apply hasheen exactamente los
+mismos bytes. La suite `run-script-tests.ps1` no regresionó (test 12 de
+detección de manipulación sigue verde; los 4 FAIL son pre-existentes:
+tests 8/9 con fixtures de matriz vieja pre-229ce0c, y 16/22 ambientales).
+CORE-PLT se aplicó luego 46/46, readback 0 divergentes.
+
+**NOT**: no diagnosticar el mismatch como plan corrupto ni como archivo
+modificado; no parchear el JSON a mano recalculando el hash externamente
+(Apply usa su propio canonical hash). El fix es hashear lo que quedará en
+disco, no el objeto en memoria.# Diagnóstico — ado-permissions-builder
 
 ## Incidente de red real durante pruebas (2026-08-26)
 
@@ -252,7 +287,7 @@ rechazando la escritura por completo, sin llegar a la red -- si el body
 dejaría fuera a alguna identidad que hoy tiene ACE real ahí. Esto protege
 incluso un plan armado a mano (como los 2 planes ad-hoc de este mismo
 incidente) o por un script futuro que no use `New-AdoPermissionsPlan.ps1`.
-Sin flag para desactivarla -- ver `.claude/rules/azure-devops-permissions/security.md`
+Sin flag para desactivarla -- ver `.cursor/rules/azure-devops.mdc` (sección de seguridad)
 § "Guardia dura...". Verificada con un test que llama a la función REAL
 (mockeando solo la consulta en vivo) y confirma que rechaza antes de
 intentar la red: caso 10d de `run-script-tests.ps1` (10c prueba que la
@@ -422,3 +457,16 @@ aplicado y verificado con GET crudo antes de aplicar el resto — luego las
 28 operaciones de rama restantes, mismo patrón, 29/29 aplicadas y
 verificadas con una relectura completa que decodifica los bits reales
 (no solo confía en "applied").
+
+## 2026-09-16 — Apply DB-Admin: 3 bugs reales de migración Windows→WSL en Invoke-AdoPermissionsRest.ps1
+
+Al correr el ciclo completo New→Test→Apply→Readback para Database-Administration-and-Monitoring (264 ACE, matriz corregida a Code-Reviewers=82038), el primer Apply reportó exit 0 pero NO aplicó nada (ningún journal escrito). Tres bugs latentes, todos de código migrado de Windows, no de datos:
+
+1. **`Cannot find drive '$env'`** — `$script:AdoPermissionsProductionExecutionsDir` estaba en comillas SIMPLES con separadores Windows: `'$env:REPO_ROOT\.local\...\executions'`. `$env:REPO_ROOT` no se expande en comillas simples y `$env:` con `\` se interpreta como drive PowerShell inexistente. Fix: resolver `REPO_ROOT` (env var si existe, si no `Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..')`) y armar la ruta con `Join-Path` cross-platform. Sin este fix, cada operación falla al registrar en el journal y NADA llega a ADO.
+
+2. **`ConvertTo-AdoPermissionsSecurityAceDescriptor` rechaza `ClaimsIdentity`** — la re-verificación de precondición itera TODOS los descriptores del acesDictionary, incluidas identidades AAD de usuario individual en forma `Microsoft.IdentityModel.Claims.ClaimsIdentity;<tenantId>\<upn>` (ej pmontero@, mdailey@) que el plan captura para PRESERVARLAS. Esa forma YA es clave final del acesDictionary de la API Security, pero el conversor solo aceptaba `Microsoft.TeamFoundation.Identity;` y `ServiceIdentity;`. Faltaba `ClaimsIdentity;` en la lista de formas finales → lanzaba → toda la op quedaba `[skipped]`. Fix: agregar `ClaimsIdentity;` como tercera forma final que se devuelve tal cual.
+
+3. **Readback `The property 'effectiveDeny' cannot be found`** — en `Get-AdoPermissionsReadbackResults`, bajo StrictMode, `$extendedInfo.effectiveDeny`/`effectiveAllow` por acceso directo lanza PropertyNotFoundStrict cuando el ACE trae `extendedInfo` pero SIN esos campos (Azure DevOps los omite si no hay permiso efectivo heredado). Confirmado: 211 de 264 ACE de DB-Admin no traen effectiveDeny. El código ya usaba `.PSObject.Properties['extendedInfo']` defensivo pero NO para los dos campos internos. Fix: acceso defensivo por `PSObject.Properties['effectiveAllow'/'effectiveDeny']`.
+
+Tras los 3 fixes: Apply = 264 applied / 0 skipped / 0 failed (HTTP 204); Readback = 264 applied / 0 divergent. All Repos DB-Admin quedó Development teams allow=16438 deny=507848, Code-Reviewers allow=82038 deny=0. Suite de tests: 42/44 (los 2 FAIL son ambientales: hook/settings.json fuera del repo real). Test 8 (matriz All Repos) se actualizó porque el fixture aún esperaba el Code-Reviewers viejo (16406, sin CreateTag/ManageNote/ViewSecAlerts).
+

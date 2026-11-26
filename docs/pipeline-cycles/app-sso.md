@@ -207,7 +207,7 @@ Una sola aprobación cubre exactamente:
 - Ejecutar y validar Desarrollo, y luego UAT, cuando este documento ya
   enumeró explícitamente que se van a ejecutar (regla del dominio ADO
   actualizada 2026-09-08 para permitir esto en una sola aprobación — ver
-  `.claude/rules/azure-devops-pipelines/authorization.md` § "Preguntar
+  `.cursor/rules/azure-devops.mdc` § "Preguntar
   una vez por operación atómica").
 - Aplicar correcciones dentro de la envolvente y límite aprobado.
 

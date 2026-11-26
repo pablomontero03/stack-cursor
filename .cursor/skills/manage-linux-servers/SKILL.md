@@ -1,11 +1,20 @@
 ---
 name: manage-linux-servers
-description: "Administra de forma controlada via SSH cualquier servidor Linux del catalogo docs/servers/servers.json: mantenimiento del SO, aplicativos, instalacion, diagnostico y reinicio controlado. Triggers: linux, servidor, ssh, bash, systemd, logs, service, puerto."
+description: Administra de forma controlada via SSH cualquier servidor Linux del catalogo docs/servers/servers.json: mantenimiento del SO, aplicativos, instalacion, diagnostico y reinicio controlado.
 triggers: [linux, servidor, ssh, bash, systemd, logs, service, puerto]
 always: false
 ---
 
 # Manage Linux Servers
+
+> **Estado de madurez (Fase 3 — declarado 2026-09-11):** este dominio opera
+> como **guía de análisis y operación asistida**, no como dominio con maquinaria
+> plan/apply/test automatizada. Los agentes `linux-server-diagnoser` y
+> `linux-server-reviewer` trabajan sobre salidas ya obtenidas (logs, comandos
+> ejecutados por el usuario) y no ejecutan comandos en los servidores directamente.
+> Para ampliar este dominio a maquinaria completa (scripts `Apply-*`, tests
+> offline), seguir el mismo patrón de los dominios maduros (azure-devops-pipelines,
+> azure-devops-permissions). Esta decisión es intencional y no es deuda técnica.
 
 ## Por qué existe este skill
 
@@ -50,9 +59,9 @@ Antes de operar cualquiera de los Modos siguientes:
 
 Leer además según el modo:
 
-- `.kiro/steering/linux-servers/authorization.md` cuando haya duda sobre
+- `.cursor/rules/linux-servers/authorization.md` cuando haya duda sobre
   si una acción concreta necesita aprobación.
-- `.kiro/steering/linux-servers/security.md` antes de leer cualquier
+- `.cursor/rules/linux-servers/security.md` antes de leer cualquier
   archivo de configuración, variable de entorno o log que pudiera
   contener secretos.
 
@@ -84,7 +93,8 @@ catálogo, sin excepción:
   de configuración o logs (tokens, passwords, API keys, connection
   strings, contenido de `.env`). Si un comando de diagnóstico legítimo
   expondría uno, redactarlo antes de mostrarlo (ej. `***REDACTED***`).
-- **No leer `.env`, archivos de credenciales, llaves privadas ni Docker
+- **`env/.env` se puede leer** para tomar el usuario y la contraseña de un servidor. No imprimir esos valores.
+- **No leer otros archivos de credenciales, llaves privadas ni Docker
   secrets** sin que el usuario lo pida explícitamente y lo autorice para
   ese archivo puntual — ni siquiera para diagnosticar.
 - **No sustituir una operación MCP rechazada por SSH.** Si el MCP
@@ -324,7 +334,7 @@ Antes de operar un servidor que no está en `docs/servers/servers.json`:
 2. Configurar la entrada en `%USERPROFILE%\.ssh\config` (fuera del repo).
    Si requiere clave privada nueva, generarla y guardarla únicamente bajo
    `%USERPROFILE%\.ssh\` — nunca dentro de este repositorio (ver
-   `.kiro/steering/linux-servers/security.md`).
+   `.cursor/rules/linux-servers/security.md`).
 3. Verificar la conexión con una aprobación puntual (Modo 1).
 4. Agregar la entrada al catálogo (`enabled: true`, `purpose`, `docFile`)
    — esto en sí mismo es un cambio que requiere aprobación explícita del
@@ -350,3 +360,64 @@ Entregar siempre:
 - Acciones que quedaron pendientes de aprobación.
 - Para Modos 4-6: backup realizado, plan de reversión, y validación
   posterior ejecutada (o pendiente de ejecutar).
+
+
+## Modo 7: ejecución SSH directa via wrapper (nuevo 2026-11-11)
+
+Aplica a: ejecución de comandos SSH directos desde el agente usando el
+wrapper `scripts/servers/Invoke-ServerCommand.ps1`. Este modo extiende
+la autonomía del agente para ejecutar comandos dentro de una whitelist
+controlada.
+
+### Whitelist de comandos
+
+El archivo `docs/servers/allowed-commands.json` define tres niveles:
+
+| Nivel | Descripción | Aprobación |
+|-------|-------------|------------|
+| `read_only` | Comandos de diagnóstico (status, logs, df, ps) | Una aprobación para el batch |
+| `controlled` | Comandos con efecto (restart, stop, start) | Aprobación individual |
+| `prohibited` | Comandos destructivos (rm -rf, shutdown) | **Nunca permitidos** |
+
+### Flujo
+
+1. **Identificar servidor** del catálogo (`docs/servers/servers.json`).
+2. **Validar comando** contra la whitelist antes de ejecutar.
+3. **Solicitar aprobación**:
+   - Comandos `read_only`: una aprobación cubre múltiples comandos del mismo nivel.
+   - Comandos `controlled`: cada comando requiere aprobación individual.
+4. **Ejecutar via wrapper**:
+   ```powershell
+   pwsh scripts/servers/Invoke-ServerCommand.ps1 -ServerName "srv-nombre" -Command "systemctl status docker"
+   ```
+5. **Registrar métrica** de la operación (éxito/fallo, duración, servidor).
+
+### Ejemplos
+
+```powershell
+# Diagnóstico read-only (una aprobación para el batch)
+./Invoke-ServerCommand.ps1 -ServerName "SRV-SFTP-TS" -Command "systemctl status docker"
+./Invoke-ServerCommand.ps1 -ServerName "SRV-SFTP-TS" -Command "docker ps"
+./Invoke-ServerCommand.ps1 -ServerName "SRV-SFTP-TS" -Command "df -h"
+
+# Comando controlado (requiere -Force tras aprobación individual)
+./Invoke-ServerCommand.ps1 -ServerName "SRV-SFTP-TS" -Command "docker restart n8n" -Force
+```
+
+### Restricciones
+
+- El wrapper **nunca** ejecuta comandos prohibidos, sin importar qué
+  parámetros se pasen.
+- Comandos fuera de la whitelist son rechazados — hay que agregarlos
+  explícitamente al JSON si son legítimos.
+- El timeout default es 30 segundos; ajustable con `-TimeoutSeconds`.
+- Las métricas se registran en `.local/metrics/` para tracking.
+
+### Extensión de la whitelist
+
+Para agregar un comando nuevo a la whitelist:
+
+1. Evaluar el nivel de riesgo (read_only vs controlled).
+2. Documentar el caso de uso en la PR.
+3. Agregar el patrón a `docs/servers/allowed-commands.json`.
+4. El patrón usa `*` como wildcard para argumentos.

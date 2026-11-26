@@ -7,7 +7,7 @@ archivo, escritura atomica (archivo temporal + rename), argv tokenizado sin
 strings de shell crudos.
 
 El MCP oficial `azure` (@azure/mcp) NO esta instalado todavia -- ver
-.kiro/rules/azure/authorization.md. Todo este dominio opera hoy
+.cursor/rules/azure.mdc. Todo este dominio opera hoy
 exclusivamente via Azure CLI (`az`), Azure Resource Graph (`az graph query`) y
 ARM REST controlado (`az rest`), nunca via MCP. No asumir que
 `mcp__azure__*` existe hasta que `.mcp.json` lo declare explicitamente.

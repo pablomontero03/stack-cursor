@@ -1,0 +1,212 @@
+---
+# Secret: PAT de Azure DevOps y webhook Teams
+# NOTA: Este secret NO es gestionado por el pipeline — se aplica manualmente una vez
+# con: kubectl -n tools-devops create secret generic cicd-dashboard-secret \
+#        --from-literal=AZURE_DEVOPS_PAT="<PAT>" \
+#        --from-literal=TEAMS_WEBHOOK_URL="<webhook_url>"
+# El pipeline NO sobreescribe este secret para evitar que un PAT rotado se pierda.
+# Para actualizarlo: kubectl -n tools-devops create secret generic cicd-dashboard-secret \
+#   --from-literal=AZURE_DEVOPS_PAT="<nuevo_PAT>" \
+#   --from-literal=TEAMS_WEBHOOK_URL="<webhook_url>" \
+#   --dry-run=client -o yaml | kubectl apply -f -
+---
+# ConfigMap: parámetros no sensibles del cicd-dashboard
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cicd-dashboard-config
+  namespace: tools-devops
+data:
+  AZURE_DEVOPS_ORG: "Shared-Service-GM"
+  AZURE_DEVOPS_PROJECT: "DevOps"
+  PORT: "8080"
+  HOST: "0.0.0.0"
+  RUNS_TOP: "50"
+  POLL_INTERVAL_MS: "180000"
+---
+# Deployment: cicd-dashboard (Node/Express backend + frontend)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cicd-dashboard
+  namespace: tools-devops
+  labels:
+    app: cicd-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cicd-dashboard
+  template:
+    metadata:
+      labels:
+        app: cicd-dashboard
+    spec:
+      containers:
+        - name: cicd-dashboard
+          image: gmonhubacreastus20001.azurecr.io/cicd-dashboard-prod:#{Build.BuildNumber}#
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: cicd-dashboard-config
+            - secretRef:
+                name: cicd-dashboard-secret
+          resources:
+            requests:
+              cpu: "25m"
+              memory: "64Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 30
+      imagePullSecrets:
+        - name: acr-secret
+---
+# Service: cicd-dashboard (ClusterIP, solo accesible internamente via oauth2-proxy)
+apiVersion: v1
+kind: Service
+metadata:
+  name: cicd-dashboard
+  namespace: tools-devops
+spec:
+  selector:
+    app: cicd-dashboard
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+# Deployment: oauth2-proxy (Azure AD SSO frente al cicd-dashboard)
+# Requiere que el Secret 'oauth2-proxy-secret' exista en el namespace tools-devops.
+# Ese Secret contiene oauth2-proxy-client-secret y cookie-secret y NO se crea
+# desde este manifest (es un secreto real que se aplica manualmente una vez).
+# El App Registration de Azure AD: client-id=45f7a5e0-ac18-4417-9949-934af65a25d2
+# Redirige a: https://cicd-dashboard.grupomontecristo.com/oauth2/callback
+# Sesión Redis: usa db=1 del oauth2-redis de kubernetes-dashboard (db=0 es del k8s-dashboard)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+  namespace: tools-devops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy
+    spec:
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:latest
+          args:
+            - --provider=azure
+            - --azure-tenant=33dd4184-3068-47da-891d-a70e02f8c0c9
+            - --client-id=45f7a5e0-ac18-4417-9949-934af65a25d2
+            - --client-secret-file=/etc/oauth2-proxy/client-secret
+            - --cookie-secret-file=/etc/oauth2-proxy/cookie-secret
+            - --redirect-url=https://cicd-dashboard.grupomontecristo.com/oauth2/callback
+            - --upstream=http://cicd-dashboard.tools-devops.svc.cluster.local:8080
+            - --http-address=0.0.0.0:4180
+            - --reverse-proxy=true
+            - --cookie-name=__Host-oauth2_proxy_cicd_dashboard
+            - --cookie-path=/
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            - --cookie-expire=5h
+            - --email-domain=grupomontecristo.com
+            - --skip-provider-button=true
+            - --oidc-issuer-url=https://login.microsoftonline.com/33dd4184-3068-47da-891d-a70e02f8c0c9/v2.0
+            - --whitelist-domain=.grupomontecristo.com
+            - --upstream-timeout=120s
+            - --session-store-type=redis
+            - --redis-connection-url=redis://oauth2-redis.kubernetes-dashboard.svc.cluster.local:6379/1
+            - --pass-user-headers=true
+            - --set-xauthrequest=true
+            - --skip-auth-route=GET=/teams-config
+            - --skip-auth-route=GET=/teams-tab
+            - --skip-auth-route=HEAD=/teams-config
+            - --skip-auth-route=HEAD=/teams-tab
+            - --skip-auth-route=^/api/
+            - --skip-auth-route=POST=^/api/
+            - --oidc-email-claim=upn
+            # NOTA: --prompt=login y --cookie-refresh=30m eliminados intencionalmente.
+            # Azure AD no emite refresh_token con este App Registration, por lo que
+            # --cookie-refresh falla y expira la sesión a los ~30s (expires:1970-01-01).
+            # Sin refresh, la cookie dura exactamente --cookie-expire=5h desde el login.
+          ports:
+            - containerPort: 4180
+          resources:
+            requests:
+              cpu: "20m"
+              memory: "64Mi"
+            limits:
+              memory: "128Mi"
+          volumeMounts:
+            - mountPath: /etc/oauth2-proxy
+              name: oauth2-proxy-secret
+              readOnly: true
+      volumes:
+        - name: oauth2-proxy-secret
+          secret:
+            secretName: oauth2-proxy-secret
+            items:
+              - key: oauth2-proxy-client-secret
+                path: client-secret
+              - key: cookie-secret
+                path: cookie-secret
+---
+# Service: oauth2-proxy (recibe tráfico del Ingress)
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy
+  namespace: tools-devops
+spec:
+  selector:
+    app: oauth2-proxy
+  ports:
+    - port: 80
+      targetPort: 4180
+---
+# Ingress — todo el tráfico va al oauth2-proxy, que autentica y reenvía al cicd-dashboard
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cicd-dashboard-ingress
+  namespace: tools-devops
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - cicd-dashboard.grupomontecristo.com
+      secretName: grupomontecristo-cert-secret
+  rules:
+    - host: cicd-dashboard.grupomontecristo.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: oauth2-proxy
+                port:
+                  number: 80

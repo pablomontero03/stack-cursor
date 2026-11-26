@@ -62,8 +62,7 @@ docs/cloudflare/CLOUDFLARE-AUTOMATION-ARCHITECTURE.md   (este archivo)
 
 ## Modelo de autorización
 
-Ver el detalle completo en `.claude/rules/cloudflare/authorization.md` y
-`security.md` — resumen:
+Ver el detalle completo en `.cursor/rules/cloudflare.mdc` — resumen:
 
 - Lectura, inventario, GraphQL de solo lectura, `docs`/`search`/`execute`
   de solo lectura del MCP, simulación Terraform, Wrangler de lectura:
@@ -208,3 +207,87 @@ MCP.
    una eliminación lógica que debe moverse a un delete plan la toma
    `Test-CloudflareChangePlan.ps1` (comparando contra el inventario) y
    `cloudflare-reviewer`.
+
+
+## Publicar un sitio del cluster prod on-prem `.31` (prod-onprem-01) — regla obligatoria
+
+Confirmado 2026-10-08 al publicar `knowledge-base.grupomontecristo.com`.
+
+Todo hostname nuevo que apunte al cluster **prod on-prem `.31`** (`prod-onprem-01`,
+`172.16.2.31`) y deba servirse por internet requiere **DOS pasos en Cloudflare, no
+uno**:
+
+1. **DNS** — registro `A → 190.113.100.74 proxied=true`. NO apuntar a
+   `172.16.2.31` (IP privada: lo deja interno). `190.113.100.74` es el egress/edge
+   NAT del `.31`.
+2. **Origin Rule** — agregar el host al ruleset `http_request_origin` de la zona
+   `grupomontecristo.com` (zone `8825f873e698947fe47a6bdaafe65a61`, ruleset
+   `667e45fc1dce47e8bca14bf203573af7`) con `action=route` y
+   `action_parameters.origin.port=4443`. **Compare-and-append**: leer el ruleset,
+   agregar solo la regla nueva, preservar las existentes; nunca reemplazar el
+   ruleset entero.
+
+**Por qué:** el `.31` **no expone el 443** a internet; el borde escucha en el
+puerto **`4443`** y Cloudflare reescribe el puerto de origen por hostname con esa
+Origin Rule. Si se crea solo el DNS, Cloudflare intenta el 443 por defecto, no hay
+nada escuchando y el sitio responde **521** aunque el DNS, el cert TLS del ingress
+y el pod estén perfectos (el origen responde `200` desde dentro del cluster).
+
+**Diagnóstico de un `521` del `.31`:** NO perseguir cert/ingress/pod ni un filtro de
+SNI en el borde — verificar PRIMERO que el host tenga su regla `:4443` en el ruleset
+`http_request_origin`. Un `503` (no `521`) significa que el edge SÍ conectó al
+origen y el backend respondió — ahí sí es la app, no la Origin Rule.
+
+Hosts ya publicados con este patrón: `grafana-onprem-01`, `datahub`,
+`cicd-dashboard`, `k8s-hub`, `cluster-onprem-01`, `knowledge-base`.
+
+> Aplica **solo** al cluster on-prem `.31`. El `k3s-dev` (`.43`) y los AKS se
+> publican por su propia vía — confirmar contra el inventario en vivo, no asumir
+> `4443` para otros clusters.
+
+---
+
+## Publicaciones any2cloud / APIBOT (IIS Windows, NO cluster) — prod y QA
+
+El API **any2cloud / APIBOT** (sitio IIS en Windows, no en k8s) se publica por internet por **DNS-only directo al borde con puerto en la URL**, NO por el proxy de Cloudflare. Se intentó proxied y daba **522 intermitente** (el NAT del borde no permite TODAS las edges de Cloudflare en el puerto del any2cloud, solo algunas → unos clientes 403/200 y otros 522). Por eso la decisión final en ambos ambientes es **DNS-only (nube gris)**: el tráfico va directo del cliente al borde, sin el filtro de edges de CF.
+
+### Regla clave transversal — SNI estricto por hostname
+
+Los bindings IIS de any2cloud son **SNI estricto por hostname** (`netsh http show sslcert` muestra `Hostname:port = <host>:443` con su cert). El cliente DEBE entrar por el **nombre DNS**, nunca por la IP pública cruda: por IP sin SNI, IIS no encuentra binding que matchee y **cierra la conexión → 000**, aunque el NAT esté perfecto. Síntoma de SNI estricto confirmado en QA: `curl https://localhost/...` (sin el nombre) da **000**, pero `curl https://<nombre>/...` da **200**.
+
+### PROD — any2cloud.grupomontecristo.com (server .76 eFlow)
+
+| Campo | Valor |
+|---|---|
+| Server | `172.16.2.76` (CRSRVSISRDP, IIS eFlow) |
+| DNS | `api-bot-any2cloud.grupomontecristo.com` → `190.113.100.74` **DNS-only** |
+| URL de acceso | `https://api-bot-any2cloud.grupomontecristo.com:6789/APIBOT/...` |
+| NAT borde | `190.113.100.74:6789 → 172.16.2.76:6789` |
+| Puerto interno IIS | **6789** (binding propio del sitio any2cloud; HTTPS/TLS 1.3 con cert `*.grupomontecristo.com`) |
+
+**Por qué `:6789` y no `:443` interno:** en el `.76` el `443` lo usan OTROS sitios eFlow (cca/ccaapi). El any2cloud se montó como sitio IIS aparte con binding propio en `*:6789`, así que el NAT es `6789 → 6789` (puerto-a-mismo-puerto). El `6789` interno habla HTTPS (confirmado: TLS 1.3, cert wildcard).
+
+### QA — api-bot-qa-any2cloud.gmontecristo.com (server .243 SRV-UAT-RJ)
+
+| Campo | Valor |
+|---|---|
+| Server | `172.16.16.243` (SRV-UAT-RJ, segmento UAT `172.16.16.x`) |
+| DNS | `api-bot-qa-any2cloud.gmontecristo.com` → `190.171.118.98` **DNS-only** (zona `gmontecristo.com`, egress UAT Telecable AS52263) |
+| URL de acceso | `https://api-bot-qa-any2cloud.gmontecristo.com/APIBOT/APIBOT.dll/api/bot/metodos/Health` (**443 limpio, SIN puerto**) |
+| NAT borde | `190.171.118.98:443 → 172.16.16.243:443` |
+| Puerto interno IIS | **443** (el any2cloud QA SÍ es dueño del 443 interno → URL limpia sin puerto) |
+| Estado final | ✅ **200** `{"result":[{"status":"OK","database":"OK"}]}` (2026-10-26) |
+
+**Por qué el QA pudo quedar en `:443` limpio y el prod no:** depende de la config IIS de cada server. En el `.243` any2cloud es dueño del `443` interno (no hay otro sitio peleando el puerto), así que el NAT apunta al `443` y la URL queda sin puerto. En el `.76` el `443` estaba ocupado → se usó `6789`.
+
+### Diagnóstico de la publicación any2cloud (checklist)
+
+1. **`000`/timeout desde una PC externa, IP directa** → el NAT del borde no entrega al server interno en ese puerto (infra: crear/revisar el NAT). Un server **recién migrado** suele perder su NAT viejo (al mover el prod del `.243` al `.76`, el NAT del `.243` quedó sin apuntar).
+2. **`SYN_RECEIVED` colgados en el `netstat` del server interno** (de IPs de internet) → el SYN entra pero el handshake no completa = **ruta de retorno asimétrica del NAT** (la respuesta sale por un path que el cliente no reconoce). Infra debe alinear el NAT de retorno. Confirmado en QA el 2026-10-26 y resuelto por infra.
+3. **`local 443 SNI → 200` pero `local 443 (localhost) → 000`** → NO es bug, es SNI estricto (ver arriba). El IIS está bien.
+4. **522 (solo si está proxied)** → el borde no permite todas las edges de CF en ese puerto → pasar a **DNS-only** (la vía elegida para any2cloud), o pedir a infra abrir todos los rangos de CF.
+
+### Limitación del agente para validar estos servers
+
+- El `.76` sale por el borde `190.113.100.74` (compartido con el `.31`) → el agente desde el hub (`10.1.0.200`) **sí** alcanza ese borde para medir prod.
+- El `.243` está en el segmento **`172.16.16.x` (UAT)**, sin ruta desde el hub: toda sonda da **`Connection timed out`** (hay `ip route` pero el firewall hub↔UAT descarta el paquete). **El agente NO puede validar el `.243` por sí mismo** — las validaciones IIS se corren en el propio server (PowerShell) y las de camino público desde una PC externa. Mediciones del agente a estos servers están sesgadas (hairpin / sin ruta): la verdad es el navegador/PC externa.

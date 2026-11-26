@@ -11,7 +11,7 @@ aprobado, leído desde una variable de entorno local (`$env:AZURE_SECRET_*`)
 o un almacén seguro — nunca desde el chat, nunca impreso, nunca guardado
 en el plan/journal/logs/memoria. Mismo mecanismo (adaptado) que
 `${ADO_SECRET_*}` en Azure DevOps Pipelines — ver
-`.claude/rules/azure-devops-pipelines/security.md` para el detalle
+Ver `.cursor/rules/azure-devops.mdc` (sección de secretos) para el detalle
 completo del patrón si hace falta implementar la resolución real.
 
 `Test-AzureChangePlan.ps1` bloquea cualquier valor literal en una
@@ -56,7 +56,7 @@ secreto nuevo y su alcance exacto.
 - Si una operación falla por falta de permisos, se reporta exactamente el
   permiso faltante y se detiene — cualquier cambio de RBAC para
   resolverlo cae en "Cambios de RBAC/gobernanza" (categoría B,
-  `.claude/rules/azure/authorization.md`) con su propia aprobación
+  `.cursor/rules/azure.mdc`) con su propia aprobación
   explícita, nunca se asume ni se aplica junto con otro cambio.
 - `az role assignment/definition list` es lectura automática; `create/
   delete/update` siempre `ask`.
@@ -80,7 +80,7 @@ secreto nuevo y su alcance exacto.
 
 - Imprimir, loggear o guardar un access token, un valor de Key Vault, una
   Storage Account key, un SAS token, credenciales de ACR, o un
-  certificado/clave privada — ver `.claude/rules/azure/security.md` §
-  Prohibido permanentemente.
+  certificado/clave privada — ver `.cursor/rules/azure.mdc` (sección
+  Prohibido permanentemente).
 - Reutilizar un secreto de una aplicación/ambiente en otro sin
   confirmación explícita del usuario.

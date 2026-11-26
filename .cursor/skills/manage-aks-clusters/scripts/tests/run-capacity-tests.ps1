@@ -5,7 +5,7 @@ JSON en un directorio temporal propio -- nunca kubectl real, nunca un
 cluster real.
 
 Uso:
-  powershell -NoProfile -ExecutionPolicy Bypass -File .\run-capacity-tests.ps1
+  pwsh -NoProfile -File .\run-capacity-tests.ps1
 #>
 
 $ErrorActionPreference = 'Stop'

@@ -1,8 +1,8 @@
 # Clasificación de variables al usar otro pipeline como fuente
 
-Referenciado por `.claude/rules/azure-devops-pipelines/authorization.md`
-§ "Clasificación automática y copia a un plan nuevo" y por
-`security.md` § "Archivo local `env/Azure-DevOps.txt`...". Se usa al
+Referenciado por `.cursor/rules/azure-devops.mdc`
+§ "Clasificación automática y copia a un plan nuevo" y por la sección
+de seguridad (secretos en archivos locales). Se usa al
 comparar Builds/Releases/Variable Groups existentes (fuente) contra un
 pipeline nuevo que se está planificando — típicamente al reutilizar la
 configuración de pipelines AKS similares.

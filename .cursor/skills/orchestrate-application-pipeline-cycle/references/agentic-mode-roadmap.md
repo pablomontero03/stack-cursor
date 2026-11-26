@@ -56,8 +56,8 @@ Piezas concretas a construir cuando se decida avanzar:
 1. Un formato de "estado del ciclo" persistente (JSON, por ejecución) que
    capture: `INPUT` resuelto, hash del plan aprobado, fase actual,
    último estado observado por dominio, timestamps. Requiere revisar la
-   decisión actual en
-   `.claude/rules/orchestrate-application-pipeline-cycle/security.md` §
+   decisión actual en `.cursor/rules/orchestration.mdc` (si existe) o en
+   `ROADMAP-MADUREZ.md` Fase 5 §
    "Archivos locales de este dominio" (hoy dice explícitamente que este
    dominio no tiene su propio `.local/` — habría que decidir si esto
    amerita crear uno, o si el estado vive junto al archivo de
@@ -146,8 +146,26 @@ un fallo real.
 
 ## Decisión pendiente del usuario
 
-Este documento no autoriza ni programa nada. Antes de implementarlo,
+~~Este documento no autoriza ni programa nada. Antes de implementarlo,
 decidir explícitamente: qué tan larga puede ser una corrida desatendida
 sin supervisión, dónde vive el estado persistido, y si aplica a los 3
 dominios (ADO/Cloudflare/AKS) o se empieza solo por el más lento
-(Build/Release/rollout de Azure DevOps + AKS).
+(Build/Release/rollout de Azure DevOps + AKS).~~
+
+**Decisión tomada (2026-09-11):**
+- **Estado persistido:** en `docs/pipeline-cycles/<runId>.json` (versionado,
+  historial permanente junto al historial de la app).
+- **Alcance inicial:** solo ADO (Build/Release) + notificación al usuario para
+  producción. Cloudflare y AKS añadidos cuando se confirme estabilidad.
+- **Caso de uso:** redeploy de una app ya configurada y sin cambios de alcance.
+  El onboarding de apps nuevas sigue siendo asistido.
+
+**Implementado en `orchestrate-application-pipeline-cycle/scripts/`:**
+- `New-AgenticCycleState.ps1` — crea y actualiza el estado persistido por corrida.
+- `Invoke-AgenticCycleWake.ps1` — wrapper de tick: consulta ADO, compara estado,
+  devuelve decisión (`advance|wait|notify-user|abort`) sin ejecutar nada.
+- `tests/run-agentic-tests.ps1` — 13 tests offline, todos PASS.
+
+**Pendiente para hacer operativo (requiere corrida real):**
+- Integrar el wake en el cron de KiroCrew (`cron_add` con el script de polling).
+- Primera corrida real de redeploy con `agentic_mode: on` en una app ya probada.

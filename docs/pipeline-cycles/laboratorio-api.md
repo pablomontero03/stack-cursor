@@ -39,7 +39,9 @@ INPUT:
 
   application_variables:
     image: laboratorio-api-
-    appname_candidate: laboratorio-api
+    # servicesname K8s = optica-ecosystem-laboratorio-api (corregido 2026-11-24)
+    appname_candidate: optica-ecosystem-laboratorio-api
+    servicesname: optica-ecosystem-laboratorio-api
 
   manifests:
     development: ./deployment-dev.yml

@@ -1,0 +1,31 @@
+{
+  "agentic_run_id": "schema-test-001",
+  "app_id": "schema-app",
+  "started_at": "2026-09-14T17:04:42Z",
+  "phase": "awaiting-build",
+  "input_hash": "schema-hash",
+  "plan_validation_hash": "plan-hash",
+  "ado": {
+    "build_id": null,
+    "release_definition_id": null,
+    "release_instance_dev": null,
+    "release_instance_uat": null,
+    "namespace": null,
+    "namespace_uat": null,
+    "servicesname": null
+  },
+  "last_observed": {
+    "at": "2026-09-14T17:04:42Z",
+    "domain": "test",
+    "state": "ok"
+  },
+  "observations": [
+    {
+      "at": "2026-09-14T17:04:42Z",
+      "domain": "test",
+      "state": "ok"
+    }
+  ],
+  "outcome": "pending",
+  "error": ""
+}

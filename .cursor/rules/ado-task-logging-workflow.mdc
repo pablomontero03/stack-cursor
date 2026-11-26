@@ -1,6 +1,6 @@
 ---
 description: "Al terminar un trabajo, crear la Task de Azure DevOps y la accion que el workflow define junto con ella. Usar cuando el usuario da el trabajo por cerrado."
-alwaysApply: false
+alwaysApply: true
 ---
 # ADO Task Logging Workflow — al terminar un trabajo
 
@@ -45,8 +45,9 @@ La Task y el push son **dos acciones independientes**: si una no aplica
 - **Herramienta:** el MCP oficial `azure-devops`
   (`wit_work_item_write`), acción `add_child` para crear y enlazar a la
   User Story padre en una sola llamada, y luego `update` para
-  `System.AssignedTo`, `Microsoft.VSTS.Scheduling.CompletedWork` y
-  `Microsoft.VSTS.Scheduling.RemainingWork`. **Nunca** se necesita el PAT
+  `System.AssignedTo` y los tres campos de Effort
+  (`Microsoft.VSTS.Scheduling.OriginalEstimate` / `CompletedWork` /
+  `RemainingWork`). **Nunca** se necesita el PAT
   para esto — el MCP hace el CRUD de work items directo.
 
 **SIEMPRE preguntar bajo qué User Story (parent) va la Task.** La
@@ -65,9 +66,12 @@ propio de Acceptance Criteria; va en la descripción):**
   Aceptación**.
 - `System.AssignedTo` — set en un `update` posterior (add_child NO lo
   setea solo).
-- `Microsoft.VSTS.Scheduling.CompletedWork` / `RemainingWork` — horas
-  numéricas estimadas según el alcance real; para una task completada,
-  RemainingWork normalmente 0.
+- `Microsoft.VSTS.Scheduling.OriginalEstimate` / `CompletedWork` /
+  `RemainingWork` — **los tres campos de Effort (Hours)** se llenan
+  siempre con horas numéricas según el alcance real. Para una task ya
+  completada: `OriginalEstimate` = estimado, `CompletedWork` = horas
+  trabajadas, `RemainingWork` = 0. (Confirmar el número de horas con el
+  usuario si no lo indicó.)
 - `System.Parent` — queda seteado automáticamente por `add_child` con el
   parentId.
 
@@ -112,3 +116,8 @@ Reglas git de este stack (del steering global y de KiroCrew):
 - Task 31182 bajo Story 31181 (22244 ya había cerrado — re-verificar el
   estado, no reutilizar un número recordado) + commit `733aec1`
   (2026-09-01, primera vez Task + push juntos).
+- Task 35079 "DataHub: alta de origen Elasticsearch productivo…" bajo
+  Story 34710, 4h/0h (2026-09-18). Recordatorio confirmado ese día por el
+  usuario: el registro va SIEMPRE como **Task hija** (`add_child`), NUNCA
+  como comentario en la User Story, y con los **tres** campos de Effort
+  (Hours) llenos.

@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CI/CD Dashboard — DevOps</title>
+  <style>
+    :root {
+      --bg: #f6f8fa; --card: #fff; --border: #e1e4e8; --text: #24292f;
+      --muted: #57606a; --ok: #1a7f37; --run: #0969da; --err: #cf222e;
+      --warn: #9a6700; --pending: #6e7781;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#e6edf3;
+        --muted:#8b949e; --ok:#3fb950; --run:#58a6ff; --err:#f85149; --warn:#d29922; --pending:#8b949e; }
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      background:var(--bg); color:var(--text); font-size:14px; }
+    header { padding:16px 24px; border-bottom:1px solid var(--border); display:flex;
+      align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+    h1 { font-size:18px; margin:0; }
+    .meta { color:var(--muted); font-size:12px; }
+    .wrap { padding:16px 24px; position:relative; }
+    /* Toolbar with tabs + page size */
+    .toolbar { display:flex; align-items:center; justify-content:space-between;
+      flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+    .tabs { display:flex; gap:8px; align-items:center; }
+    .tab { padding:6px 14px; border:1px solid var(--border); border-radius:6px; cursor:pointer;
+      background:var(--card); color:var(--text); font-size:13px; display:flex; align-items:center; gap:5px; }
+    .tab.active { border-color:var(--run); color:var(--run); font-weight:600; }
+    .tab.tab-prs.active { border-color:#0969da; color:#0969da; }
+    .tab.tab-approvals.active { border-color:#9a3fbf; color:#9a3fbf; }
+    /* Pull Requests panel */
+    #prsPanel { display:none; margin-bottom:16px; clear:both; width:100%; }
+    .pr-empty { color:var(--muted); font-size:13px; padding:16px 0; text-align:center; }
+    .pr-row { display:flex; align-items:flex-start; gap:10px; padding:10px 14px;
+      background:var(--card); border:1px solid var(--border); border-radius:6px;
+      margin-bottom:6px; flex-wrap:wrap; }
+    .pr-info { flex:1; min-width:200px; }
+    .pr-title { font-size:13px; font-weight:600; }
+    .pr-title a { color:var(--run); text-decoration:none; }
+    .pr-title a:hover { text-decoration:underline; }
+    .pr-meta { font-size:12px; color:var(--muted); margin-top:3px; display:flex; gap:8px; flex-wrap:wrap; }
+    .pr-reviewers { font-size:11px; color:var(--muted); margin-top:4px; }
+    .pr-actions { display:flex; gap:6px; align-items:center; }
+    .badge-count { background:#cf222e; color:#fff; border-radius:10px; font-size:11px;
+      font-weight:700; padding:0 6px; line-height:18px; }
+    .page-size { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); }
+    .page-size select { border:1px solid var(--border); border-radius:4px; padding:3px 6px;
+      background:var(--card); color:var(--text); font-size:12px; cursor:pointer; }
+    /* Approvals panel */
+    #approvalsPanel { display:none; margin-bottom:16px; clear:both; width:100%; }
+    .approvals-empty { color:var(--muted); font-size:13px; padding:16px 0; text-align:center; }
+    .approval-row { display:flex; align-items:center; gap:10px; padding:10px 14px;
+      background:var(--card); border:1px solid var(--border); border-radius:6px;
+      margin-bottom:6px; flex-wrap:wrap; }
+    .approval-info { flex:1; min-width:200px; }
+    .approval-def { font-size:13px; font-weight:600; }
+    .approval-def a { color:var(--run); text-decoration:none; }
+    .approval-def a:hover { text-decoration:underline; }
+    .approval-stage { font-size:12px; color:var(--muted); margin-top:3px; }
+    .approval-actions { display:flex; gap:6px; }
+    .btn-approve { background:#1a7f37; color:#fff; border:none; padding:6px 16px;
+      border-radius:5px; cursor:pointer; font-size:12px; font-weight:600; }
+    .btn-approve:hover { background:#1c8a3c; }
+    .btn-reject  { background:#cf222e; color:#fff; border:none; padding:6px 16px;
+      border-radius:5px; cursor:pointer; font-size:12px; font-weight:600; }
+    .btn-reject:hover { background:#a81e26; }
+    .btn-approve:disabled, .btn-reject:disabled { opacity:.5; cursor:default; }
+    .approval-result { font-size:12px; font-weight:600; padding:4px 12px;
+      border-radius:12px; }
+    .approval-result.ok  { background:rgba(63,185,80,.15); color:var(--ok); }
+    .approval-result.err { background:rgba(248,81,73,.15); color:var(--err); }
+    /* Runs table */
+    table { width:100%; border-collapse:collapse; background:var(--card);
+      border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+    th,td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); }
+    th { font-size:12px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); }
+    tr.row { cursor:pointer; }
+    tr.row:hover { background:rgba(9,105,218,.06); }
+    .name-link { color:var(--run); text-decoration:none; font-weight:600; }
+    .name-link:hover { text-decoration:underline; }
+    .kind-chip { display:inline-block; font-size:10px; font-weight:700; padding:2px 8px;
+      border-radius:10px; text-transform:uppercase; letter-spacing:.04em; }
+    .kind-build   { background:rgba(88,166,255,.15); color:var(--run); }
+    .kind-release { background:rgba(26,127,55,.15); color:var(--ok); }
+    .badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:12px; font-weight:600; }
+    .b-ok { background:rgba(63,185,80,.15); color:var(--ok); }
+    .b-run { background:rgba(88,166,255,.15); color:var(--run); }
+    .b-err { background:rgba(248,81,73,.15); color:var(--err); }
+    .b-warn { background:rgba(210,153,34,.15); color:var(--warn); }
+    .b-pend { background:rgba(139,148,158,.15); color:var(--pending); }
+    .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:var(--muted); }
+    .err-banner { background:rgba(248,81,73,.12); color:var(--err); padding:8px 12px;
+      border-radius:6px; margin-bottom:12px; display:none; }
+    .btn-cancel { background:var(--card); color:var(--err); border:1px solid var(--err);
+      padding:3px 10px; border-radius:5px; cursor:pointer; font-size:11px; font-weight:600;
+      white-space:nowrap; }
+    .btn-cancel:hover { background:var(--err); color:#fff; }
+    .btn-cancel:disabled { opacity:.5; cursor:default; }
+    .pagination { display:flex; align-items:center; justify-content:space-between;
+      margin-top:12px; flex-wrap:wrap; gap:8px; }
+    .pagination .info { font-size:12px; color:var(--muted); }
+    .pagination .btns { display:flex; gap:6px; }
+    .btn-page { padding:5px 12px; border:1px solid var(--border); border-radius:6px;
+      background:var(--card); color:var(--text); cursor:pointer; font-size:12px; }
+    .btn-page:disabled { opacity:0.4; cursor:default; }
+    .btn-page:not(:disabled):hover { border-color:var(--run); color:var(--run); }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>CI/CD Dashboard</h1>
+      <div class="meta" id="sub">Proyecto: — · cargando…</div>
+    </div>
+    <div class="meta" id="updated">—</div>
+    <span class="meta" id="userInfo" style="font-size:11px;color:var(--muted);"></span>
+    <button id="btnRefresh" onclick="manualRefresh()" title="Actualizar ahora"
+      style="padding:4px 12px;border:1px solid var(--border);border-radius:5px;
+      background:var(--card);color:var(--muted);cursor:pointer;font-size:12px;">
+      ↻ Actualizar
+    </button>
+  </header>
+  <div class="wrap">
+    <div class="err-banner" id="errBanner"></div>
+
+    <div class="toolbar">
+      <div class="tabs">
+        <div class="tab active" data-tab="all">Todos</div>
+        <div class="tab" data-tab="build">Builds</div>
+        <div class="tab" data-tab="release">Releases</div>
+        <div class="tab tab-approvals" data-tab="approvals" id="tabApprovals">
+          🔔 Aprobaciones
+        </div>
+        <div class="tab tab-prs" data-tab="prs" id="tabPRs">
+          🔀 Pull Requests
+        </div>
+      </div>
+      <input id="searchBox" type="search" placeholder="🔍 Buscar por nombre…"
+        oninput="onSearch()" onchange="onSearch()" onkeyup="onSearch()"
+        style="flex:1;min-width:160px;max-width:320px;padding:5px 10px;
+               border:1px solid var(--border);border-radius:6px;
+               background:var(--card);color:var(--text);font-size:13px;
+               outline:none;margin:0 8px;">
+      <button id="prsScopeBtn" onclick="togglePRsScope(event)"
+        style="display:none;padding:5px 12px;border:1px solid var(--border);
+               border-radius:6px;background:var(--card);color:var(--text);
+               font-size:13px;cursor:pointer;white-space:nowrap;margin-right:8px;">👤 Solo míos</button>
+      <div class="page-size" id="pageSizeWrap">
+        Mostrar
+        <select id="pageSel">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="15" selected>15</option>
+          <option value="20">20</option>
+        </select>
+        por página
+      </div>
+    </div>
+
+    <!-- Approvals panel (hidden by default) -->
+    <div id="approvalsPanel">
+      <div id="approvalsList"><div class="approvals-empty">Cargando aprobaciones…</div></div>
+    </div>
+
+    <!-- Confirm modal (replaces window.confirm — blocked in Teams iframe) -->
+    <div id="confirmModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
+      <div style="background:var(--card);border-radius:10px;padding:28px 32px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.4)">
+        <div id="confirmMsg" style="font-size:15px;margin-bottom:24px;line-height:1.5"></div>
+        <div style="display:flex;gap:12px;justify-content:flex-end">
+          <button id="confirmCancel" class="btn-cancel" style="min-width:90px">Cancelar</button>
+          <button id="confirmOk" class="btn-approve" style="min-width:90px;background:#6e3fbf">Confirmar</button>
+        </div>
+      </div>
+    </div>
+    <div id="prsPanel">
+      <div id="prsList"><div class="pr-empty">Cargando pull requests…</div></div>
+      <div class="pagination" id="prsPagination" style="display:none">
+        <div class="info" id="prsPageInfo"></div>
+        <div class="btns">
+          <button class="btn-page" id="btnPrsPrev">← Anterior</button>
+          <button class="btn-page" id="btnPrsNext">Siguiente →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Runs table (shown by default) -->
+    <div id="runsPanel">
+      <table>
+        <thead>
+          <tr>
+            <th>Estado</th>
+            <th>Nombre</th>
+            <th>Tipo</th>
+            <th>Rama / Stages</th>
+            <th>Detalle</th>
+            <th>Quién</th>
+            <th>Cuándo</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="pagination">
+        <div class="info" id="pageInfo"></div>
+        <div class="btns">
+          <button class="btn-page" id="btnPrev">← Anterior</button>
+          <button class="btn-page" id="btnNext">Siguiente →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var REFRESH_MS = 3 * 60 * 1000;   // 3 minutos
+    var APPROVALS_MS = 60 * 1000;
+    var current = 'all';   // all | build | release | approvals
+    var currentPage = 1;
+    var data = { items: [] };
+    var filtered = [];
+    var searchQuery = '';
+    var currentUser = { email: null, canApprove: false };
+
+    function onSearch() {
+      searchQuery = (document.getElementById('searchBox').value || '').toLowerCase().trim();
+      currentPage = 1;
+      prsPage = 1;
+      if (current === 'approvals') loadApprovals();
+      else if (current === 'prs') renderPRsPage();
+      else render();
+    }
+
+    // Wrapper for all API calls — includes Teams SSO token when running inside Teams
+    function apiFetch(url, opts) {
+      opts = opts || {};
+      var token = window.__TEAMS_TOKEN;
+      if (token) {
+        opts.headers = opts.headers || {};
+        opts.headers['x-teams-token'] = token;
+      }
+      return fetch(url, opts);
+    }
+
+    // Load current user identity — uses Teams SSO token when inside Teams, oauth2-proxy header otherwise
+    function loadMe() {
+      var teamsToken = window.__TEAMS_TOKEN;
+      var url = teamsToken ? ('/api/teams-me?token=' + encodeURIComponent(teamsToken)) : '/api/me';
+      fetch(url).then(function(r){return r.json();}).then(function(u){
+        currentUser = u;
+        if (u.email) {
+          var info = document.getElementById('userInfo');
+          if (info) info.textContent = u.email + (u.canApprove ? ' ✓' : '');
+        }
+      }).catch(function(){});
+    }
+
+    function pageSize() { return parseInt(document.getElementById('pageSel').value, 10); }
+
+    function timeAgo(iso) {
+      if (!iso) return '—';
+      var d = new Date(iso), s = Math.floor((Date.now() - d.getTime()) / 1000);
+      if (s < 60) return s + 's';
+      if (s < 3600) return Math.floor(s / 60) + 'm';
+      if (s < 86400) return Math.floor(s / 3600) + 'h';
+      return Math.floor(s / 86400) + 'd';
+    }
+
+    function buildBadge(it) {
+      if (it.kind === 'build') {
+        if (it.status === 'inProgress') return '<span class="badge b-run">En ejecución</span>';
+        if (it.status !== 'completed') return '<span class="badge b-pend">' + escapeHtml(it.status||'—') + '</span>';
+        if (it.result === 'succeeded') return '<span class="badge b-ok">Éxito</span>';
+        if (it.result === 'partiallySucceeded') return '<span class="badge b-warn">Parcial</span>';
+        if (it.result === 'canceled') return '<span class="badge b-pend">Cancelado</span>';
+        return '<span class="badge b-err">Error</span>';
+      }
+      var st = (it.stages||[]).map(function(s){return s.status;});
+      if (st.indexOf('rejected') >= 0) return '<span class="badge b-err">Error</span>';
+      if (st.indexOf('inProgress') >= 0) return '<span class="badge b-run">Desplegando</span>';
+      if (st.indexOf('partiallySucceeded') >= 0) return '<span class="badge b-warn">Parcial</span>';
+      if (st.length && st.every(function(x){return x==='succeeded';})) return '<span class="badge b-ok">Éxito</span>';
+      return '<span class="badge b-pend">Pendiente</span>';
+    }
+
+    function stageChips(it) {
+      if (it.kind !== 'release') return '<span class="mono">' + escapeHtml(it.branch || '—') + '</span>';
+      if (!it.stages || !it.stages.length) return '<span class="mono">—</span>';
+      return '<div class="stages">' + it.stages.map(function(s){
+        var cls = s.status==='succeeded'?'b-ok':s.status==='rejected'?'b-err':
+          s.status==='inProgress'?'b-run':s.status==='partiallySucceeded'?'b-warn':'b-pend';
+        return '<span class="badge '+cls+'" title="'+escapeHtml(s.name)+'">'+escapeHtml(s.name)+'</span>';
+      }).join('') + '</div>';
+    }
+
+    function detailCell(it) {
+      if (it.kind === 'build') return '<span class="mono">' + escapeHtml(it.buildNumber||'') +
+        (it.commit ? ' · ' + escapeHtml(it.commit) : '') + '</span>';
+      return '<span class="mono">' + escapeHtml(it.releaseName||('#'+it.id)) + '</span>';
+    }
+
+    function whoCell(it) { return escapeHtml(it.kind==='build'?it.requestedFor:it.createdBy); }
+
+    function whenCell(it) {
+      var t = it.kind==='build' ? (it.finishTime||it.startTime||it.queueTime) : (it.modifiedOn||it.createdOn);
+      return '<span class="mono">' + timeAgo(t) + ' ago</span>';
+    }
+
+    function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+    function buildRows() {
+      filtered = data.items.filter(function(it){
+        if (current !== 'all' && it.kind !== current) return false;
+        if (searchQuery) {
+          var haystack = [it.name, it.releaseName, it.buildNumber, it.requestedFor, it.createdBy, it.branch]
+            .filter(Boolean).join(' ').toLowerCase();
+          if (haystack.indexOf(searchQuery) === -1) return false;
+        }
+        return true;
+      });
+      filtered.sort(function(a,b){
+        var ta = a.kind==='build'?(a.queueTime||a.startTime):(a.createdOn);
+        var tb = b.kind==='build'?(b.queueTime||b.startTime):(b.createdOn);
+        return new Date(tb||0) - new Date(ta||0);
+      });
+    }
+
+    function render() {
+      var isApprovals = current === 'approvals';
+      var isPRs = current === 'prs';
+      document.getElementById('approvalsPanel').style.display = isApprovals ? 'block' : 'none';
+      document.getElementById('prsPanel').style.display = isPRs ? 'block' : 'none';
+      document.getElementById('runsPanel').style.display = (isApprovals || isPRs) ? 'none' : 'block';
+      var ps = document.getElementById('pageSizeWrap');
+      ps.style.visibility = (isApprovals || isPRs) ? 'hidden' : 'visible';
+      var scopeBtn = document.getElementById('prsScopeBtn');
+      if (scopeBtn) { scopeBtn.style.display = isPRs ? 'inline-block' : 'none'; if (isPRs) updatePRsScopeBtn(); }
+      if (isApprovals || isPRs) return;
+
+      buildRows();
+      var ps = pageSize();
+      var totalPages = Math.max(1, Math.ceil(filtered.length / ps));
+      if (currentPage > totalPages) currentPage = totalPages;
+      var start = (currentPage - 1) * ps;
+      var page = filtered.slice(start, start + ps);
+
+      var rows = document.getElementById('rows');
+      rows.innerHTML = page.map(function(it){
+        var urlAttr = escapeHtml(it.url || '#');
+        var kindChip = it.kind === 'build'
+          ? '<span class="kind-chip kind-build">Build</span>'
+          : '<span class="kind-chip kind-release">Release</span>';
+        var nameCell = '<a class="name-link" href="'+urlAttr+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">'
+          + escapeHtml(it.name) + '</a>';
+        // Cancel button: show only for active/in-progress items AND for approvers
+        var isActive = it.kind === 'build'
+          ? (it.status === 'inProgress' || it.status === 'notStarted')
+          : (it.stages||[]).some(function(s){return s.status==='inProgress';});
+        var cancelCell = (isActive && currentUser.canApprove)
+          ? '<button class="btn-cancel" id="cancel-'+it.kind+'-'+it.id+'" '+
+            'onclick="event.stopPropagation();doCancel(\''+it.kind+'\','+it.id+')">✕ Cancelar</button>'
+          : '';
+        return '<tr class="row" data-url="'+urlAttr+'">' +
+          '<td>'+buildBadge(it)+'</td>' +
+          '<td>'+nameCell+'</td>' +
+          '<td>'+kindChip+'</td>' +
+          '<td>'+stageChips(it)+'</td>' +
+          '<td>'+detailCell(it)+'</td>' +
+          '<td>'+whoCell(it)+'</td>' +
+          '<td>'+whenCell(it)+'</td>' +
+          '<td>'+cancelCell+'</td>' +
+        '</tr>';
+      }).join('') || '<tr><td colspan="8" class="meta" style="text-align:center;padding:24px">Sin datos aún.</td></tr>';
+
+      Array.prototype.forEach.call(rows.querySelectorAll('tr.row'), function(tr){
+        tr.addEventListener('click', function(e){
+          if (e.target.tagName === 'A') return;
+          window.open(tr.getAttribute('data-url'), '_blank');
+        });
+      });
+
+      document.getElementById('pageInfo').textContent =
+        filtered.length === 0 ? '' :
+        'Página ' + currentPage + ' de ' + totalPages + ' · ' + filtered.length + ' items';
+      document.getElementById('btnPrev').disabled = currentPage <= 1;
+      document.getElementById('btnNext').disabled = currentPage >= totalPages;
+    }
+
+    // ---- Approvals ----
+    function updateApprovalsBadge(count) {
+      var tab = document.getElementById('tabApprovals');
+      var existing = tab.querySelector('.badge-count');
+      if (existing) existing.remove();
+      if (count > 0) {
+        var span = document.createElement('span');
+        span.className = 'badge-count';
+        span.textContent = count;
+        tab.appendChild(span);
+      }
+    }
+
+    function loadApprovals() {
+      fetch('/api/approvals').then(function(r){return r.json();}).then(function(j){
+        var items = j.items || [];
+        // Apply search filter
+        if (searchQuery) {
+          items = items.filter(function(a){
+            var haystack = [a.definitionName, a.releaseName, a.stageName]
+              .filter(Boolean).join(' ').toLowerCase();
+            return haystack.indexOf(searchQuery) !== -1;
+          });
+        }
+        updateApprovalsBadge((j.items||[]).length); // badge shows total, not filtered
+        var list = document.getElementById('approvalsList');
+        if (!items.length) {
+          list.innerHTML = searchQuery
+            ? '<div class="approvals-empty">🔍 Sin resultados para "'+escapeHtml(searchQuery)+'"</div>'
+            : '<div class="approvals-empty">✅ Sin aprobaciones pendientes</div>';
+          return;
+        }
+        list.innerHTML = items.map(function(a){
+          return '<div class="approval-row" id="apr-'+a.approvalId+'">' +
+            '<div class="approval-info">' +
+              '<div class="approval-def">' +
+                '<a href="'+escapeHtml(a.url||'#')+'" target="_blank" rel="noopener">' +
+                  escapeHtml(a.definitionName||a.releaseName||'?') +
+                '</a>' +
+                ' <span class="mono">'+escapeHtml(a.releaseName||'')+'</span>' +
+              '</div>' +
+              '<div class="approval-stage">' +
+                '<span class="badge b-run">'+escapeHtml(a.stageName||'?')+'</span>' +
+                ' &nbsp;Pre-Deployment · hace ' + timeAgo(a.createdOn) +
+              '</div>' +
+            '</div>' +
+            '<div class="approval-actions">' +
+              (currentUser.canApprove
+                ? '<button class="btn-approve" onclick="doApprove('+a.approvalId+',\'approved\')">✓ Aprobar</button>' +
+                  '<button class="btn-reject"  onclick="doApprove('+a.approvalId+',\'rejected\')">✗ Rechazar</button>'
+                : '<span class="meta">Solo lectura</span>') +
+            '</div>' +
+          '</div>';
+        }).join('');
+      }).catch(function(e){
+        document.getElementById('approvalsList').innerHTML =
+          '<div class="approvals-empty" style="color:var(--err)">Error: '+escapeHtml(e.message)+'</div>';
+      });
+    }
+
+    function doApprove(approvalId, action) {
+      var row = document.getElementById('apr-' + approvalId);
+      if (!row) return;
+      var btns = row.querySelectorAll('button');
+      Array.prototype.forEach.call(btns, function(b){ b.disabled = true; });
+      apiFetch('/api/approvals/' + approvalId, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ action: action, comment: 'Aprobado desde CI/CD Dashboard' })
+      }).then(function(r){return r.json();}).then(function(j){
+        var actionsDiv = row.querySelector('.approval-actions');
+        if (j.ok) {
+          actionsDiv.innerHTML = '<span class="approval-result ok">'+(action==='approved'?'✓ Aprobado':'✗ Rechazado')+'</span>';
+          setTimeout(loadApprovals, 1500);
+        } else {
+          actionsDiv.innerHTML = '<span class="approval-result err">Error: '+escapeHtml(j.error||'?')+'</span>';
+        }
+      }).catch(function(e){
+        row.querySelector('.approval-actions').innerHTML =
+          '<span class="approval-result err">Error: '+escapeHtml(e.message)+'</span>';
+      });
+    }
+
+    // ---- Pull Requests ----
+    // ---- Pull Requests badge & vote label helpers ----
+    function updatePRsBadge(count) {
+      var tab = document.getElementById('tabPRs');
+      var existing = tab.querySelector('.badge-count');
+      if (existing) existing.remove();
+      if (count > 0) {
+        var span = document.createElement('span');
+        span.className = 'badge-count';
+        span.textContent = count;
+        tab.appendChild(span);
+      }
+    }
+
+    function voteLabel(vote) {
+      if (vote === 10) return '<span class="approval-result ok">✓ Aprobado</span>';
+      if (vote === -10) return '<span class="approval-result err">✗ Rechazado</span>';
+      if (vote === 5) return '<span class="approval-result ok" style="opacity:.8">✓ Con sugerencias</span>';
+      return '';
+    }
+
+    var PRS_PAGE_SIZE = 10;
+    var prsPage = 1;
+    var allPRItems = [];
+    var prsOnlyMine = true;   // por defecto: solo PRs donde pmontero o Release Executers es reviewer
+    var RELEASE_EXECUTERS_ID = '397ddbfe-1d60-4533-a4c9-b099f80ac154';
+
+    // Devuelve el reviewer propio del PR (identidad directa, prefijo de email,
+    // o pertenencia al grupo Release Executers), o null si no soy reviewer.
+    function myReviewerFor(pr) {
+      if (!currentUser.email) return null;
+      var mine = (pr.reviewers||[]).find(function(r){
+        if (currentUser.adoId && r.id === currentUser.adoId) return true;
+        var emailPrefix = currentUser.email.split('@')[0].toLowerCase();
+        return (r.displayName||'').toLowerCase().indexOf(emailPrefix) !== -1 ||
+               (r.uniqueName||'').toLowerCase() === currentUser.email;
+      }) || null;
+      if (!mine && currentUser.canApprove && currentUser.adoId) {
+        var hasGroup = (pr.reviewers||[]).some(function(r){ return r.id === RELEASE_EXECUTERS_ID; });
+        if (hasGroup) mine = { id: currentUser.adoId, vote: 0 };
+      }
+      return mine;
+    }
+
+    function renderPRsPage() {
+      var items = allPRItems;
+      if (prsOnlyMine) {
+        items = items.filter(function(pr){ return myReviewerFor(pr) !== null; });
+      }
+      if (searchQuery) {
+        items = items.filter(function(pr){
+          var h = [pr.title, pr.repoName, pr.projectName, pr.createdBy, pr.sourceBranch, pr.targetBranch]
+            .filter(Boolean).join(' ').toLowerCase();
+          return h.indexOf(searchQuery) !== -1;
+        });
+      }
+      var total = items.length;
+      var totalPages = Math.max(1, Math.ceil(total / PRS_PAGE_SIZE));
+      if (prsPage > totalPages) prsPage = totalPages;
+      var start = (prsPage - 1) * PRS_PAGE_SIZE;
+      var page = items.slice(start, start + PRS_PAGE_SIZE);
+
+      var list = document.getElementById('prsList');
+      var pagination = document.getElementById('prsPagination');
+
+      updatePRsBadge(total);
+
+      if (!page.length) {
+        list.innerHTML = searchQuery
+          ? '<div class="pr-empty">🔍 Sin resultados para "'+escapeHtml(searchQuery)+'"</div>'
+          : (prsOnlyMine
+              ? '<div class="pr-empty">✅ Sin pull requests que te involucren. <a href="#" onclick="togglePRsScope(event)">Ver todos</a></div>'
+              : '<div class="pr-empty">✅ Sin pull requests activos</div>');
+        pagination.style.display = 'none';
+        return;
+      }
+
+      list.innerHTML = page.map(function(pr){
+        var myReviewer = myReviewerFor(pr);
+        var myVote = myReviewer ? myReviewer.vote : 0;
+        var myReviewerId = myReviewer ? myReviewer.id : null;
+
+        var reviewerSummary = (pr.reviewers||[]).map(function(r){
+          var icon = r.vote===10?'✓':r.vote===-10?'✗':r.vote===5?'~':'○';
+          var color = r.vote===10?'var(--ok)':r.vote===-10?'var(--err)':'var(--muted)';
+          return '<span style="color:'+color+'" title="'+escapeHtml(r.displayName||'')+'">'+icon+' '+escapeHtml(r.displayName||'')+'</span>';
+        }).join(' &nbsp; ') || '<em>Sin revisores</em>';
+
+        var actionHtml;
+        if (!currentUser.canApprove) {
+          actionHtml = '<span class="meta">Solo lectura</span>';
+        } else if (myVote !== 0) {
+          var completeBtn = myVote === 10
+            ? ' <button class="btn-approve" style="margin-left:6px;background:#6e3fbf" onclick="doPRComplete(\''+pr.repoId+'\','+pr.pullRequestId+',\''+escapeHtml(pr.projectName||'')+'\',this)">⎆ Completar</button>'
+            : '';
+          actionHtml = voteLabel(myVote) +
+            ' <button class="btn-cancel" style="margin-left:6px" onclick="doPRVote(\''+pr.repoId+'\','+pr.pullRequestId+',0,\''+myReviewerId+'\',\''+escapeHtml(pr.projectName||'')+'\',this)">↺ Reset</button>' + completeBtn;
+        } else if (!myReviewerId) {
+          actionHtml = '<span class="meta" style="font-size:11px">No eres reviewer en este PR</span>';
+        } else {
+          actionHtml =
+            '<button class="btn-approve" onclick="doPRVote(\''+pr.repoId+'\','+pr.pullRequestId+',10,\''+myReviewerId+'\',\''+escapeHtml(pr.projectName||'')+'\',this)">✓ Aprobar</button>' +
+            '<button class="btn-reject" onclick="doPRVote(\''+pr.repoId+'\','+pr.pullRequestId+',-10,\''+myReviewerId+'\',\''+escapeHtml(pr.projectName||'')+'\',this)">✗ Rechazar</button>';
+        }
+
+        return '<div class="pr-row" id="pr-'+pr.pullRequestId+'">'+
+          '<div class="pr-info">'+
+            '<div class="pr-title">'+
+              (pr.isDraft ? '<span class="badge b-pend" style="font-size:10px;margin-right:4px">Draft</span>' : '')+
+              '<a href="'+escapeHtml(pr.url||'#')+'" target="_blank" rel="noopener">'+escapeHtml(pr.title)+'</a>'+
+              ' <span class="mono" style="font-size:11px;color:var(--muted)">#'+pr.pullRequestId+'</span>'+
+            '</div>'+
+            '<div class="pr-meta">'+
+              '<span class="badge b-pend">'+escapeHtml(pr.projectName||'')+'</span>'+
+              '<span>'+escapeHtml(pr.repoName||'')+'</span>'+
+              '<span class="mono">'+escapeHtml(pr.sourceBranch)+' → '+escapeHtml(pr.targetBranch)+'</span>'+
+              '<span>'+escapeHtml(pr.createdBy)+'</span>'+
+              '<span class="mono">'+timeAgo(pr.creationDate)+' ago</span>'+
+            '</div>'+
+            '<div class="pr-reviewers">Revisores: '+reviewerSummary+'</div>'+
+          '</div>'+
+          '<div class="pr-actions" id="pr-actions-'+pr.pullRequestId+'">'+actionHtml+'</div>'+
+        '</div>';
+      }).join('');
+
+      pagination.style.display = total > PRS_PAGE_SIZE ? 'flex' : 'none';
+      document.getElementById('prsPageInfo').textContent =
+        'Página ' + prsPage + ' de ' + totalPages + ' · ' + total + ' PRs';
+      document.getElementById('btnPrsPrev').disabled = prsPage <= 1;
+      document.getElementById('btnPrsNext').disabled = prsPage >= totalPages;
+    }
+
+    function togglePRsScope(ev) {
+      if (ev) ev.preventDefault();
+      prsOnlyMine = !prsOnlyMine;
+      prsPage = 1;
+      updatePRsScopeBtn();
+      renderPRsPage();
+    }
+
+    function updatePRsScopeBtn() {
+      var btn = document.getElementById('prsScopeBtn');
+      if (!btn) return;
+      btn.textContent = prsOnlyMine ? '👤 Solo míos' : '🌐 Todos';
+      btn.title = prsOnlyMine
+        ? 'Mostrando solo PRs donde tú o Release Executers son revisores. Click para ver todos.'
+        : 'Mostrando todos los PRs activos de la organización. Click para ver solo los tuyos.';
+      btn.setAttribute('aria-pressed', prsOnlyMine ? 'true' : 'false');
+    }
+
+    function loadPRs() {
+      apiFetch('/api/pull-requests').then(function(r){return r.json();}).then(function(j){
+        allPRItems = j.items || [];
+        prsPage = 1;
+        renderPRsPage();
+      }).catch(function(e){
+        document.getElementById('prsList').innerHTML =
+          '<div class="pr-empty" style="color:var(--err)">Error: '+escapeHtml(e.message)+'</div>';
+      });
+    }
+
+    function doPRVote(repoId, prId, vote, reviewerId, projectName, btn) {
+      var actionsDiv = document.getElementById('pr-actions-'+prId);
+      if (actionsDiv) {
+        Array.prototype.forEach.call(actionsDiv.querySelectorAll('button'), function(b){ b.disabled = true; });
+      }
+      apiFetch('/api/pull-requests/'+repoId+'/'+prId+'/vote', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ vote: vote, reviewerId: reviewerId, projectName: projectName })
+      }).then(function(r){return r.json();}).then(function(j){
+        if (j.ok) {
+          setTimeout(loadPRs, 1000);
+        } else if (actionsDiv) {
+          actionsDiv.innerHTML = '<span class="approval-result err">Error: '+escapeHtml(j.error||'?')+'</span>';
+        }
+      }).catch(function(e){
+        if (actionsDiv) actionsDiv.innerHTML = '<span class="approval-result err">Error: '+escapeHtml(e.message)+'</span>';
+      });
+    }
+
+    // Custom confirm dialog — window.confirm() is blocked in Teams iframe
+    function showConfirm(msg, onOk) {
+      var modal = document.getElementById('confirmModal');
+      document.getElementById('confirmMsg').textContent = msg;
+      modal.style.display = 'flex';
+      var ok = document.getElementById('confirmOk');
+      var cancel = document.getElementById('confirmCancel');
+      function cleanup() {
+        modal.style.display = 'none';
+        ok.removeEventListener('click', onYes);
+        cancel.removeEventListener('click', onNo);
+      }
+      function onYes() { cleanup(); onOk(); }
+      function onNo()  { cleanup(); }
+      ok.addEventListener('click', onYes);
+      cancel.addEventListener('click', onNo);
+    }
+
+    function doPRComplete(repoId, prId, projectName, btn) {
+      showConfirm('¿Completar (merge) el PR #'+prId+'? Esta acción no se puede deshacer.', function() {
+        var actionsDiv = document.getElementById('pr-actions-'+prId);
+        if (actionsDiv) Array.prototype.forEach.call(actionsDiv.querySelectorAll('button'), function(b){ b.disabled = true; });
+        apiFetch('/api/pull-requests/'+repoId+'/'+prId+'/complete', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ deleteSourceBranch: false, projectName: projectName })
+        }).then(function(r){return r.json();}).then(function(j){
+          if (j.ok) {
+            if (actionsDiv) actionsDiv.innerHTML = '<span class="approval-result ok">✓ Completado (merged)</span>';
+            setTimeout(loadPRs, 2000);
+          } else if (actionsDiv) {
+            actionsDiv.innerHTML = '<span class="approval-result err">Error: '+escapeHtml(j.error||'?')+'</span>';
+          }
+        }).catch(function(e){
+          if (actionsDiv) actionsDiv.innerHTML = '<span class="approval-result err">Error: '+escapeHtml(e.message)+'</span>';
+        });
+      });
+    }
+
+    // ---- Runs ----
+    function load(force) {
+      var btn = document.getElementById('btnRefresh');
+      if (btn) { btn.textContent = '↻ Actualizando…'; btn.disabled = true; }
+      var url = '/api/runs' + (force ? '?refresh=1' : '');
+      apiFetch(url).then(function(r){return r.json();}).then(function(j){
+        data = j;
+        document.getElementById('sub').textContent =
+          'Proyecto: '+(j.org||'')+'/'+(j.project||'')+' · '+(j.count||0)+' runs';
+        // Show LOCAL client time when data arrived, not server UTC timestamp
+        document.getElementById('updated').textContent =
+          'Actualizado: ' + new Date().toLocaleTimeString();
+        var eb = document.getElementById('errBanner');
+        if (j.lastError) { eb.style.display='block'; eb.textContent='Error consultando ADO: '+j.lastError; }
+        else { eb.style.display='none'; }
+        currentPage = 1;
+        render();
+      }).catch(function(e){
+        var eb = document.getElementById('errBanner');
+        eb.style.display='block'; eb.textContent='No se pudo cargar /api/runs: '+e.message;
+      }).finally(function(){
+        if (btn) { btn.textContent = '↻ Actualizar'; btn.disabled = false; }
+      });
+    }
+
+    function manualRefresh() {
+      load(true);
+      loadApprovals();
+      loadPRs();
+    }
+
+    function doCancel(kind, id) {
+      var btn = document.getElementById('cancel-'+kind+'-'+id);
+      if (btn) { btn.disabled = true; btn.textContent = 'Cancelando…'; }
+      apiFetch('/api/cancel/'+kind+'/'+id, { method: 'POST' })
+        .then(function(r){return r.json();})
+        .then(function(j){
+          if (!btn) return;
+          if (j.ok || j.error === undefined) {
+            btn.textContent = '⏳ Procesando…';
+            btn.style.color = 'var(--warn)';
+            btn.style.borderColor = 'var(--warn)';
+            // ADO needs a few seconds to process the cancellation
+            setTimeout(function(){ load(true); }, 4000);
+          } else {
+            btn.textContent = '✕ Cancelar';
+            btn.disabled = false;
+            alert('Error al cancelar: ' + (j.error || j.message || 'desconocido'));
+          }
+        })
+        .catch(function(e){
+          if (btn) { btn.textContent = '✕ Cancelar'; btn.disabled = false; }
+        });
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('.tab'), function(t){
+      t.addEventListener('click', function(){
+        document.querySelector('.tab.active').classList.remove('active');
+        t.classList.add('active');
+        current = t.getAttribute('data-tab');
+        currentPage = 1;
+        render();
+        if (current === 'approvals') loadApprovals();
+        if (current === 'prs') loadPRs();
+      });
+    });
+
+    document.getElementById('btnPrsPrev').addEventListener('click', function(){
+      if (prsPage > 1) { prsPage--; renderPRsPage(); }
+    });
+    document.getElementById('btnPrsNext').addEventListener('click', function(){
+      var totalPages = Math.ceil(allPRItems.length / PRS_PAGE_SIZE);
+      if (prsPage < totalPages) { prsPage++; renderPRsPage(); }
+    });
+
+    document.getElementById('pageSel').addEventListener('change', function(){ currentPage=1; render(); });
+    document.getElementById('btnPrev').addEventListener('click', function(){
+      if (currentPage > 1) { currentPage--; render(); }
+    });
+    document.getElementById('btnNext').addEventListener('click', function(){
+      var ps = pageSize();
+      var totalPages = Math.ceil(filtered.length / ps);
+      if (currentPage < totalPages) { currentPage++; render(); }
+    });
+
+    loadMe();
+    // In Teams mode, delay the first data load to allow Teams SDK to fetch the SSO token.
+    // Without delay, the first fetch fires before getAuthToken() resolves and has no credentials.
+    if (window.__TEAMS_MODE) {
+      setTimeout(function(){ load(); loadApprovals(); loadPRs(); }, 800);
+    } else {
+      load();
+      loadApprovals();
+      loadPRs();
+    }
+    setInterval(load, REFRESH_MS);
+    setInterval(loadApprovals, APPROVALS_MS);
+    setInterval(loadPRs, APPROVALS_MS);
+  </script>
+</body>
+</html>

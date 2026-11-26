@@ -1,5 +1,11 @@
 # Instrucciones para Claude Code — Azure DevOps Pipelines
 
+> **⚠️ Documento histórico (era Claude Code, 2026-08).** Las rutas, nombres de
+> herramientas y estructura de directorios corresponden al entorno Claude Code
+> anterior (`D:\Proyectos\`, `.claude/skills/`, `.claude/rules/`). En Kiro, las
+> rutas equivalentes son `.cursor/skills/`, `.cursor/rules/` y `.cursor/agents/`.
+> Preservado como referencia de las decisiones de diseño originales del dominio.
+
 ## Objetivo
 
 Incorporar al proyecto `D:\Proyectos\automation` una estructura profesional para consultar, crear, revisar, ejecutar y diagnosticar pipelines de Azure DevOps, con foco inicial en pipelines clásicos de aplicaciones hacia AKS y pipelines clásicos de bases de datos DACPAC/SSDT.
@@ -52,7 +58,7 @@ Antes de editar:
    - `.claude/settings.json`
    - `.claude/settings.local.json`
    - `.gitignore`
-   - `.claude/rules/agent-memory.md`
+   - `.cursor/rules/global.mdc` (sección de memoria de agentes)
 2. Inventariar las carpetas actuales dentro de `.claude/` y `docs/`.
 3. Preservar Schema Sync, n8n, AKS y el dominio del servidor SSH.
 4. No reemplazar archivos completos si basta con integrarlos.
@@ -351,7 +357,7 @@ Los tres agentes deben incluir:
 memory: project
 ```
 
-Cada carpeta de memoria debe coincidir exactamente con el `name` del agente y seguir `.claude/rules/agent-memory.md`.
+Cada carpeta de memoria debe coincidir exactamente con el `name` del agente y seguir `.cursor/rules/global.mdc` (sección de memoria de agentes).
 
 No inicializar la memoria con datos no confirmados. Después de una tarea, guardar únicamente patrones reutilizables, causas raíz confirmadas y soluciones validadas. Nunca guardar PAT, passwords, headers, secretos, Variable Group secret values ni payloads sensibles.
 

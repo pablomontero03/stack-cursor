@@ -1,0 +1,37 @@
+﻿================================================================================
+INSTALACION PYTHON EN GATEWAY HOST
+Fecha: 2026-07-24
+Host: 172.16.2.127
+Gateway path: C:\Program Files\On-premises data gateway
+================================================================================
+
+VERSION ELEGIDA
+- Python 3.11.9 (64-bit) desde python.org
+- Motivo: Power BI Service (Premium/Fabric) documenta runtime Python 3.11
+  para paquetes soportados. Desktop usa la instalacion local; se recomienda
+  igualar a 3.11.
+
+INSTALADO
+- Ruta: C:\Python311\python.exe
+- PATH maquina: C:\Python311\ y C:\Python311\Scripts\
+- Paquetes: pandas 3.0.5, matplotlib 3.11.1 (+ deps numpy, etc.)
+- Log: C:\Publicados\python-install-log.txt
+- Verificacion: IMPORTS_OK
+
+LIMITACION IMPORTANTE (Microsoft)
+- El On-premises data gateway EMPRESARIAL NO ejecuta scripts Python/R
+  en refresh del servicio Power BI.
+- Python en refresh programado requiere On-premises data gateway
+  (personal mode) en la misma maquina, con la misma version/paquetes.
+- Instalar Python en el host del gateway empresa puede ayudar a Desktop
+  o a un personal gateway, pero NO elimina por si solo el error
+  "Configuracion incorrecta" del gateway empresa cuando el modelo tiene
+  origen Python.
+
+PROXIMOS PASOS SUGERIDOS
+1. Si el modelo reportes maia usa Python.Execute: instalar/usar Personal
+   Gateway, o quitar/reemplazar el paso Python en Power Query.
+2. Continuar mapeo MySQL/SharePoint/Elastic (paso 2 del plan).
+3. Validar en Settings si el estado del gateway cambio tras el restart.
+
+================================================================================

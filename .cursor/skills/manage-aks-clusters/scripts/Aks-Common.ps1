@@ -61,7 +61,7 @@ function Get-AksResolvedKubeconfigPaths {
         return @($envValue -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_.Trim() })
     }
 
-    $defaultPath = Join-Path $env:USERPROFILE '.kube\config'
+    $defaultPath = Join-Path ($env:USERPROFILE ?? $env:HOME) '.kube' 'config'
     return @($defaultPath)
 }
 

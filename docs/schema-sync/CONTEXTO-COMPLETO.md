@@ -174,6 +174,8 @@ Al 2026-08-14 hay **20** enabled de ~49 en `databases.json`:
 
 **Nota de nombres:** a veces el nombre real en MI ≠ nombre del sqlproj/repo (ej. `buklo_lab` vs `sqldb_buklo_lab`). El workflow debe usar el **nombre real de la BD** en `DATABASE=`.
 
+**Bundle habilitado 2026-09-30:** `core-workflow-global` (`sqldb_core_global` + `sqldb_core_workflow`) en repo `project-qldb_core_workflow-sqldb_core_global`. Primer sync exitoso: ejecución `2537744`, `main` en `070ec23`. Ver §16 para el hallazgo de errores y correcciones al tool.
+
 Pendientes típicos del catálogo (aún no enabled / sin workflow dedicado en esta tanda):  
 `sqldb_da_global`, `gm_*`, más `stg_*`, `sds_*`, ecommerce, int_*, etc.
 
@@ -424,11 +426,13 @@ dotnet publish -c Release -r linux-x64 --self-contained true -o ..\publish\linux
 
 ## 13. Pendientes / siguiente
 
-- [ ] Softland: Compare dacpac→proyecto, commit objetos, decidir si entra a sync automatizado (haría falta acceso de `usr_repo_sync` o host distinto a `172.16.2.26`)
-- [ ] Actualizar README operativo (catálogo enabled real; fila troubleshooting headers)
-- [ ] Resto del catálogo disabled (da_global, gm_*, más stg/sds/int/ecommerce, …) — solo bajo pedido
-- [ ] Orquestador multi-BD: mantener inactivo hasta política clara de batch
-- [ ] Revisar BDs con `buildOk=false` por SQL71501 heredado de la BD
+- [ ] **URGENTE (2026-09-30):** Orquestador reducido a solo `core-workflow-global`. Restaurar las demás BDs en el nodo `Set - Params` del orquestador n8n.
+- [ ] **URGENTE (2026-09-30):** PR [#13986](https://dev.azure.com/Shared-Service-GM/Database-Administration-and-Monitoring/_git/project-qldb_core_workflow-sqldb_core_global/pullrequest/13986) en `project-qldb_core_workflow-sqldb_core_global` pendiente de revisión y merge a `release`.
+- [ ] Commitear y publicar el `SchemaSyncTool` con los fixes de CLR/SQLCMD/bundle al repo fuente (hoy solo se desplegó el binario al `.60`).
+- [ ] `buklo_lab` — equipo PACE debe hacer `ALTER FUNCTION [pace].[fn_facility_occupancy_stats]` con nombres de columna correctos (ver §15).
+- [ ] Softland: Compare dacpac→proyecto, decidir si entra a sync automatizado.
+- [ ] Actualizar README operativo (catálogo enabled real; fila troubleshooting headers).
+- [ ] Resto del catálogo disabled (da_global, gm_*, más stg/sds/int/ecommerce, …) — solo bajo pedido.
 
 ---
 
@@ -443,4 +447,146 @@ dotnet publish -c Release -r linux-x64 --self-contained true -o ..\publish\linux
 
 ---
 
+---
+
+## 15. Hallazgo 2026-09-29 — buklo_lab dejó de compilar después del Schema Sync
+
+**Repositorio:** `project_sqldb_buklo_lab` · **Base:** `buklo_lab` en `gmon-prod-sqlmi-eastus2-0001`  
+**Flujo:** orquestador `ScHmSyNcOrCh0001` · **Build ADO:** 647 `Build_Base_Datos_sqldb_buklo_lab` · **Release ADO:** def 403
+
+### Causa raíz
+
+El PR **13925 (TKS-39832, 28-sep)** hizo una "limpieza del esquema pace en release previo a reestructuración" y sacó del `.sqlproj` los `<Build Include>` de dos objetos:
+
+- `pace/Functions/fn_facility_occupancy_stats.sql`
+- `pace/Tables/cat_pace_forecast.sql`
+
+Los archivos `.sql` quedaron en el repo pero fuera del build. Como el Release usa `DropObjectsNotInSource=False`, el publish del PR **13944 (BUG-19474, 29-sep 11:56)** no eliminó esos objetos de `buklo_lab` — los dejó intactos en la instancia.
+
+El sync del 29-sep detectó que esos dos objetos existen en la BD pero no están en el `.sqlproj` y los volvió a registrar como `<Build Include>` en el commit `32b461ad`. A partir de ese commit SSDT sí compila la función y falla con `SQL71501` porque el cuerpo usa nombres de columna del esquema anterior a **TKS-21827 (28-jul-2026)**:
+
+| La función usa | La tabla tiene |
+|---|---|
+| `pace.cat_provider.blue_id` | `id_blue` |
+| `pace.cat_provider.cat_provider_id` | `id` |
+| `pace.cat_provider.cat_company_id` | `id_cat_company` |
+| `pace.cat_scope_by_capacity_type.cat_facility_id` | `id_cat_facility` |
+| `pace.cat_scope_by_capacity_type.cat_provider_id` | `id_cat_provider` |
+
+El error no es introducido por el sync — existía desde julio 2026 y estaba oculto porque el `Build Include` estaba ausente.
+
+### Cronología de commits relevantes
+
+| Commit | Fecha | Autor | Include de los dos objetos |
+|---|---|---|---|
+| `dc899e2f` | 28-sep | — | Sí estaban |
+| `3a608ba4` | 28-sep 16:17 | TKS-39832 | **Se quitaron** |
+| `bf8af4f4` | 28-sep | PR 13925 merge | Siguen fuera |
+| `311ac2dd` | 28-sep 18:13 | TKS-39918 | Siguen fuera |
+| `d2b24da6` | 29-sep 11:56 | BUG-19474 | Siguen fuera — **compila OK** |
+| `32b461ad` | 29-sep 16:42 | schema-sync-bot | **Se volvieron a agregar — rompe compilación** |
+| `941fc98a` | 29-sep 16:48 | schema-sync-bot | Sin cambio en .sqlproj — solo reformatea tra_price_list* |
+
+### Por qué el Release no eliminó los objetos de la BD
+
+El TG `Deployment-DataBases` publica con `/p:DropObjectsNotInSource=False` (explícito en el release, no solo el default de la herramienta). Un objeto que sale del DACPAC por falta de `Build Include` no genera `DROP` en el publish — simplemente el dacpac no dice nada sobre él.
+
+### Estado al cerrar el hallazgo (30-sep 02:00 CR)
+
+- `main` y `release` tienen los dos objetos con `Build Include`. El proyecto no compila.
+- La función `fn_facility_occupancy_stats` tiene el cuerpo desactualizado en la BD también (SQL Server no la valida en runtime sin `SCHEMABINDING`).
+- La BD `buklo_lab` sigue teniendo ambos objetos.
+- El sync, en la próxima corrida, seguirá viéndolos en la instancia.
+
+### Opciones de resolución (pendiente equipo PACE)
+
+**Ruta A — corregir la función (recomendada):** `ALTER FUNCTION [pace].[fn_facility_occupancy_stats]` con los nombres de columna actuales → sync captura la versión corregida → proyecto compila limpio.
+
+**Ruta B — eliminar los objetos si ya no tienen uso:** `DROP FUNCTION [pace].[fn_facility_occupancy_stats]` + `DROP TABLE [pace].[cat_pace_forecast]` → sync los quita del repo en la próxima corrida → `.sqlproj` vuelve a compilar.
+
+### Lección de proceso
+
+Cuando se saca un `<Build Include>` de un `.sqlproj` sin eliminar el objeto de la BD, el sync lo va a volver a incluir en la próxima corrida — es el comportamiento correcto. Antes de hacer una "limpieza" de objetos en el `.sqlproj`, decidir explícitamente si el objeto también se elimina de la instancia. Si no se elimina, el sync lo reintegra.
+
+---
+
 *Este documento es el contexto acumulado del trabajo de schema-sync y repos SSDT. Para comandos cortos del día a día, ver `README.md`.*
+
+## 16. Hallazgo 2026-09-30 — sqldb_core_global y sqldb_core_workflow dejaron de compilar después del Schema Sync
+
+**Repositorio:** `project-qldb_core_workflow-sqldb_core_global` · **Bases:** `sqldb_core_global` + `sqldb_core_workflow` en `gmon-prod-sqlmi-eastus2-0001`  
+**Flujo:** orquestador `ScHmSyNcOrCh0001` · **Bundle:** `core-workflow-global`  
+**Archivo completo:** `docs/schema-sync/HALLAZGO-CORE-WORKFLOW-GLOBAL-SQLPROJ-2026-09-30.md`
+
+### Causa raíz
+
+El primer sync del bundle (habilitado 2026-09-30) generó dos commits en `main` que rompieron la compilación de ambas bases:
+
+| Commit | Base | Error principal |
+|---|---|---|
+| `370143fc` | `sqldb_core_global` | `SQL71508` ensamblado `RegExValidator` duplicado (DLL + script `CREATE ASSEMBLY` incluido al build) |
+| `753d007` | `sqldb_core_workflow` | `SQL71508` esquemas `external`/`aseguradora` duplicados + **346 `SQL71561`** por `[$(sqldb_core_global)]` → `[sqldb_core_global]` literal |
+
+El commit `753d007` también commiteó con título `OpsObservability` por defecto porque `DATABASE` no estaba seteada en modo bundle al salir con error.
+
+### Los tres problemas y sus correcciones en el SchemaSyncTool
+
+**1. Ensamblados CLR en `sqldb_core_global`**  
+El project tiene `<Reference>` a tres DLL (`Proy_RegExValidator`, `CLRSQLRegexLibrary`, `sql.common`) con `GenerateSqlClrDdl=False`. El sync incluía al build los scripts `CREATE ASSEMBLY` sueltos que extrajo del DACPAC, duplicando lo que el compilador ya emite desde el DLL.  
+→ Fix: `skipClrAssemblies` en el JSON del bundle. Si el `.sqlproj` tiene `GenerateSqlClrDdl=False` para ese ensamblado, el script `CREATE ASSEMBLY` se excluye del build y del compare.
+
+**2. Esquemas duplicados en `sqldb_core_workflow`**  
+`Security\external.sql` y `Security\aseguradora.sql` crean los mismos esquemas que `Security\external_1.sql` y `Security\aseguradora_1.sql`. Estaban en `<None Include>`; el sync los pasó a `<Build Include>`.  
+→ Fix: `keepAsNone` en el JSON del bundle. Esos dos archivos se mantienen en `<None Include>` y fuera del compare.
+
+**3. Variable SQLCMD `[$(sqldb_core_global)]` reemplazada por nombre literal**  
+El `preserveSqlCmdRefs` del JSON del bundle existía como configuración pero no estaba implementado en el tool. El DACPAC guarda el nombre literal de la BD; al escribir los `.sql` el sync lo dejaba literal en lugar de restaurar la variable.  
+→ Fix implementado: `SqlCmdPreserve` restaura `[sqldb_core_global]` y `sqldb_core_global.` → `[$(sqldb_core_global)]` después del refresco, antes de cualquier comparación. Afecta 7 archivos (57 referencias en total, solo en `sqldb_core_workflow`).
+
+**4. Bug secundario: borrado incorrecto de `tra_workflow.sql` por sus triggers inline**  
+Los triggers `tr_ai_tra_workflow` y `tr_au_tra_workflow` viven dentro de `workflow\Tables\tra_workflow.sql` (después de un `GO`). El sync detectaba `CREATE TRIGGER` en ese archivo y lo borraba al encontrar archivos sueltos de trigger. Los archivos sueltos no estaban en git.  
+→ Fix: si otro archivo contiene un `CREATE TABLE` para la misma tabla, se borra el trigger suelto y se conserva el script de la tabla.
+
+**5. `accept-dacfx-incongruence.py` aceptaba cualquier incongruencia y commiteaba como `OpsObservability`**  
+El script aceptaba cualquier mensaje que contuviera "incongruencia" aunque la base fuera distinta a `pace`. El commit title usaba el default `OpsObservability` cuando `DATABASE` no estaba seteada.  
+→ Fix: solo acepta incongruencias del esquema `pace` (caso conocido de FK circular). El título del commit usa el database del resultado; en bundle usa el nombre del bundle.
+
+### Corridas de prueba y estado final
+
+| Ejecución | Resultado |
+|---|---|
+| `2536884`–`2537319` | Iteraciones de debug — varios fallos intermedios |
+| `2537421` (13:55–13:57) | Commit `22a7603` — volvieron los objetos de factura, variable restaurada. PR 13986. Aún fallaba `SQL71501` de esquema `external`. |
+| `2537584` (14:09–14:12) | Commit `070ec23` — esquema `external` resuelto. |
+| `2537744` (14:23–14:25) | **`buildOk=true`, sin drift**. `main` queda en `070ec23`. ✅ |
+
+### Qué se dejó pendiente
+
+- 3 tablas de respaldo de `replicator` siguen en `<Build Include>` (no causaron errores).
+- Los usuarios y `RoleMemberships` pasados de `None` a `Build` no se revirtieron (sin errores).
+- El orquestador sigue con solo el bundle `core-workflow-global` activo al cerrar. Restaurar las demás BDs.
+- El tool de la herramienta no se commiteó al repo de desarrollo.
+- `prUrl: null` bug en resultados de bundle → workaround: `open-pr-if-missing.py` en el `.60`.
+
+### Lección de proceso
+
+Un bundle de SSDT con referencias CLR (DLL + `GenerateSqlClrDdl=False`) y variables SQLCMD cross-DB requiere configuración explícita en el JSON del bundle (`skipClrAssemblies`, `keepAsNone`, `preserveSqlCmdRefs`) para que el sync no rompa la compilación. Validar siempre con dry-run antes de habilitar un bundle nuevo.
+
+---
+
+
+---
+
+## Nota de estado 2026-11-09 — dos orquestadores activos
+
+Esta nota se agrega sin modificar lo anterior. Donde el texto histórico dice que el orquestador está "inactivo" o con `do_not_auto_run=true`, prevalece lo siguiente (verificado en vivo en `n8n-interno`):
+
+- `ScHmSyNcOrCh0001` (núcleo): activo, `do_not_auto_run=false`, Dom–Vie 19:00 CR, 21 de 22 bases enabled (falta `sqldb_da_global`).
+- `F9RXPgIJQ7QzZ15q` (negocio + staging, "orquestador 2"): creado el 2026-11-04 como clon del 0001, activado el 2026-11-09, `do_not_auto_run=false`, Dom–Vie 20:30 CR, 18 de 28 bases enabled.
+- Ambos deben mantenerse en espejo: todo cambio de grafo o lógica va a los dos, con respaldo previo en `.local/schema-sync/backups/`.
+- Pilotos del 2026-11-04 (flujo 2): 27 repos verificados con `.sqlproj`; 18 pasaron con `status=success` y `buildOk=true`.
+- Fallos pendientes (enabled=false): build SSDT en `int_medica`, `int_nomedica`, `stg_iolab`; drift BD↔repo en `database_maintenance`, `gm_cotizadores`, `pre_stage`, `sds_salesforce`.
+- Bases heavy inactivas: `stg_hana`, `stg_hana_nomed`, `SOFTLAND`. El Compare live tarda más de 40 min por base y el wrapper CLI de n8n crasheó (~65 min) abortando la cola; requieren vía DACPAC con CommandTimeout alto.
+- Repos sin proyecto SSDT, fuera del catálogo: `dw_eflow`, `eflow_sislocar`, `rj_coyol`.
+- `schema-sync/databases.json` no existe en el checkout; hoy la fuente efectiva del catálogo es el nodo `Set - Params` de cada workflow.
+- Procedimiento vigente: `schema-sync/README.md`, sección "Orquestador multi-BD".

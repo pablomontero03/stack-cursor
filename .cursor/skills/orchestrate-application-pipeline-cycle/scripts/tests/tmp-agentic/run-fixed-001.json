@@ -1,0 +1,25 @@
+{
+  "agentic_run_id": "run-fixed-001",
+  "app_id": "idempotent-app",
+  "started_at": "2026-09-14T17:04:42Z",
+  "phase": "build-running",
+  "input_hash": "h1",
+  "plan_validation_hash": "",
+  "ado": {
+    "build_id": 999,
+    "release_definition_id": null,
+    "release_instance_dev": null,
+    "release_instance_uat": null,
+    "namespace": null,
+    "namespace_uat": null,
+    "servicesname": null
+  },
+  "last_observed": {
+    "domain": "phase-change",
+    "state": "build-running",
+    "at": "2026-09-14T17:04:42Z"
+  },
+  "observations": [],
+  "outcome": "pending",
+  "error": ""
+}

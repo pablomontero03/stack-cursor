@@ -1,6 +1,6 @@
 ---
 name: manage-azure-devops-permissions
-description: "Administra grupos de seguridad de proyecto, membresias, permisos Git y Branch Policies en proyectos de Shared-Service-GM para grupos Development Team y Code-Reviewers. Triggers: permisos, permissions, grupos, members, code-reviewers, development team, ado."
+description: Administra grupos de seguridad de proyecto, membresias, permisos Git y Branch Policies en proyectos de Shared-Service-GM para grupos Development Team y Code-Reviewers.
 triggers: [permisos, permissions, grupos, members, code-reviewers, development team, ado]
 always: false
 ---
@@ -28,6 +28,10 @@ intake de proyectos y miembros (conversacional, nunca por similitud)
     mismo turno (una sola tarjeta de aprobación cubre todo el plan)
   → apply exacto ya aprobado (respeta precondición, journal de ejecución)
   → reporte de aplicado/omitido/ya-aplicado/fallido
+  → [OBLIGATORIO] invocar ado-permissions-reviewer para verificar que el
+    estado en vivo coincide con el patrón canónico esperado — sin este
+    paso el ciclo no está cerrado. El reviewer verifica AllRepos, feature/*
+    y ramas protegidas para cada grupo y reporta ✅/❌ por nodo.
 ```
 
 No saltar pasos. `Apply-AdoPermissionsPlan.ps1` rechaza siempre cualquier
@@ -102,7 +106,7 @@ MAYOR 2"). Dos capas, ninguna opcional:
    consultar el estado en vivo justo antes de escribir y RECHAZA la
    operación (sin llegar a la red) si dejaría fuera a alguna identidad
    con ACE real hoy — sin flag para desactivarla, protege incluso un
-   plan armado a mano. Ver `.kiro/steering/azure-devops-permissions/security.md`
+   plan armado a mano. Ver `.cursor/rules/azure-devops-permissions/security.md`
    § "Guardia dura..." y el test 10d de `run-script-tests.ps1`.
 
 ## Prioridad: MCP primero, REST controlado para la brecha
@@ -163,6 +167,17 @@ Export-AdoPolicyInventory.ps1 (GET puro, origen y destino)
     secretos, buildDefinitionIdOverride si aplica)
   → presentar el plan completo e invocar Apply-AdoPolicyPlan.ps1 en el
     mismo turno (una sola tarjeta de aprobación cubre todo el plan)
+  → [OBLIGATORIO post-apply] Invoke-AdoRemapPolicyReviewers.ps1 para
+    reemplazar el reviewer ID del proyecto modelo por el del grupo
+    Code-Reviewers del proyecto destino en todas las políticas
+    "Required reviewers" — sin este paso el reviewer apunta a un grupo
+    ajeno. Uso (modo autodetect — recomendado):
+      pwsh -File Invoke-AdoRemapPolicyReviewers.ps1 -Project '<proyecto-destino>'
+    El script autodetecta OldReviewerId (IDs foráneos en las políticas) y
+    NewReviewerId (Code-Reviewers del proyecto via Graph API). Pasar
+    -OldReviewerId / -NewReviewerId explícitamente solo si el autodetect
+    no puede resolverlos (proyecto sin grupo Code-Reviewers, múltiples
+    grupos con ese nombre).
 ```
 
 Reglas clave:
@@ -181,6 +196,13 @@ Reglas clave:
   permiten adaptar el alcance por repo destino (ej. un repo que todavía
   no tiene su propio pipeline de Build Validation, o que solo necesita
   algunas ramas).
+- **Required reviewers — grupo del propio proyecto:** al replicar desde
+  un proyecto modelo, el `requiredReviewerIds` del origen apunta al grupo
+  `Code-Reviewers` del proyecto FUENTE. SIEMPRE reemplazar ese ID por el
+  del grupo `Code-Reviewers` del proyecto DESTINO antes o después de aplicar.
+  Nunca dejar un reviewer de otro proyecto (ej. `[Buklo]\\Code-Reviewers`)
+  como reviewer requerido en repos de otro proyecto.
+  Confirmado y corregido 2026-09-17 en 127 políticas de DB-Admin.
 
 ## Capacidad futura: repositorios y ramas
 

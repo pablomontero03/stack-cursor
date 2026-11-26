@@ -2,7 +2,7 @@
 
 Proyecto de operación con agentes. La raíz es este repositorio (`/home/cursor/stack-cursor` en el servidor). Las rutas relativas salen de aquí.
 
-Hasta terminar la migración, el comportamiento maduro vive en `/home/cursor/automation-kiro`. El propósito de cada skill y de cada subagente está inventariado en `docs/MIGRACION-CURSOR.md`. Al portar, se conserva el texto original. No se resume ni se reinterpreta.
+El comportamiento de operación es el de esta carpeta. `automation-kiro` queda como origen, no como lugar de trabajo. Antes de actuar en un dominio se sigue `.cursor/rules/antes-de-actuar.mdc`: skill, memoria y docs, en ese orden.
 
 ## Contrato
 
@@ -15,6 +15,10 @@ Estas reglas ya aplican y se mantienen al convertir el steering `global.md`:
 - Los secretos viven en `env/.env`. No se imprimen ni se commitean.
 - No se inspeccionan rutas fuera de esta raíz sin autorización explícita.
 
-## Qué todavía no está en esta carpeta
+## Dónde está el dominio
 
-Skills, subagentes, memorias, rules de dominio, hook de SQL y MCP. Su checklist está en `docs/MIGRACION-CURSOR.md`.
+- Reglas: `.cursor/rules/`
+- Skills: `.cursor/skills/`
+- Subagentes: `.cursor/agents/`
+- Memoria y lecciones de cada subagente: `.cursor/memories/<nombre>/`
+- Sesiones anteriores: `.local/sesiones-kiro/INDICE.md`

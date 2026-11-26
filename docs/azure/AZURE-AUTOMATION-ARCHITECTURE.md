@@ -56,8 +56,7 @@ docs/azure/AZURE-AUTOMATION-ARCHITECTURE.md   (este archivo)
 
 ## Modelo de autorización
 
-Ver el detalle completo en `.claude/rules/azure/authorization.md` y
-`security.md` — resumen:
+Ver el detalle completo en `.cursor/rules/azure.mdc` — resumen:
 
 - Lectura, inventario, Resource Graph, Activity Log, what-if y validación:
   automáticos.
@@ -104,7 +103,7 @@ versión estable). Decisión del usuario: construir el dominio completo
 sobre Azure CLI/Resource Graph/ARM REST primero, y agregar el MCP en una
 fase separada — cuando exista una versión estable, o cuando el usuario lo
 pida explícitamente — fijando una versión exacta y probándolo primero
-solo en modo lectura (ver `.claude/rules/azure/authorization.md` §
+solo en modo lectura (ver `.cursor/rules/azure.mdc` §
 Conexión del MCP para el procedimiento).
 
 Ninguna funcionalidad de este dominio depende del MCP — inventario

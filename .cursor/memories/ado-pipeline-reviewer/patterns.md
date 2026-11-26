@@ -182,3 +182,22 @@ ese ambiente en silencio (nunca matchea ningún build real). Reportar como
 hallazgo IMPORTANTE aunque `approvedOperations` no lo consuma todavía —
 mejor corregirlo cuando es solo metadata que después de que rompa un
 despliegue real.
+
+## Regla: no ejecutar setup.sh de Kiro
+**Causa de crashes del gateway confirmada en producción (2026-09-21).**
+
+No ejecutar `setup-kiro.sh` ni `source ./setup.sh`. Las variables se cargan con `set -a; source env/.env; set +a`. `./setup-cursor.sh` no reinicia el worker.
+
+**Siempre usar `--no-restart` cuando se ejecuta desde una sesión activa de Crew:**
+```bash
+set -a; source env/.env; set +a
+```
+
+**Cuándo SÍ reiniciar (sin --no-restart):**
+- Primera instalación en una máquina nueva
+- Cuando el operador lo pide explícitamente
+- Cuando se agregan nuevos agentes o skills que requieren recarga
+
+**Cuándo NO reiniciar (usar --no-restart):**
+- Cualquier vez que el agente ejecuta setup.sh para cargar variables de entorno
+- Al inicio de scripts que solo necesitan `$REPO_ROOT`, `$AZURE_DEVOPS_PAT`, etc.

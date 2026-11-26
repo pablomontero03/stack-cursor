@@ -25,7 +25,7 @@ eliminaciones pendientes, solo lo reporta como nota informativa.
 
 ## Fase 2 — aprobación destructiva (siempre separada)
 
-Ver `.claude/rules/azure/authorization.md` § Aprobación de eliminaciones.
+Ver `.cursor/rules/azure.mdc` (sección Aprobación de eliminaciones).
 Antes de `Apply-AzureDeletePlan.ps1`: revalidar inventario/locks/
 dependencias, mostrar el lote destructivo exacto (resource IDs, no solo
 conteo), pedir la aprobación destructiva correspondiente.

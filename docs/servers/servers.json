@@ -38,8 +38,28 @@
       "port": 22,
       "user": "adm01",
       "enabled": true,
-      "purpose": "Elastic (apagado) y Ollama corriendo (hostname real srvdesarrollo03)",
+      "purpose": "k3s cluster prod-onprem-01 (cicd-dashboard, k8s-dashboard-hub), Elastic (apagado) y Ollama corriendo (hostname real srvdesarrollo03)",
       "docFile": "docs/servers/172.16.2.31.md"
+    },
+    {
+      "id": "172.16.2.61",
+      "host": "172.16.2.61",
+      "sshAlias": "172.16.2.61",
+      "port": 22,
+      "user": "tidesarrollo",
+      "enabled": true,
+      "purpose": "Servidor IA NVIDIA #1 (DGX Spark, GPU NVIDIA GB10, hostname real spark-8bac)",
+      "docFile": "docs/servers/172.16.2.61.md"
+    },
+    {
+      "id": "172.16.2.63",
+      "host": "172.16.2.63",
+      "sshAlias": "172.16.2.63",
+      "port": 22,
+      "user": "tidesarrollo",
+      "enabled": true,
+      "purpose": "Servidor IA NVIDIA #2 (DGX Spark, GPU NVIDIA GB10, hostname real spark-0a57)",
+      "docFile": "docs/servers/172.16.2.63.md"
     },
     {
       "id": "openedx",
@@ -51,6 +71,38 @@
       "purpose": "Open edX (hostname real VM)",
       "docFile": "docs/servers/openedx.md",
       "note": "Clave privada vive en env/keyopenedx.pem dentro del repo (excepcion conocida y aceptada por el usuario 2026-09-08), no en %USERPROFILE%\\.ssh\\ como el resto"
+    },
+    {
+      "id": "172.16.2.95",
+      "host": "172.16.2.95",
+      "sshAlias": "172.16.2.95",
+      "port": 22,
+      "user": "eprac",
+      "enabled": true,
+      "purpose": "Host Docker de eIntegra Core (crsrvapipampa01, Ubuntu 24.04): eintegra-interface-api-prd PRD :8090 + eintegra-interface-api QA :8080",
+      "docFile": "docs/servers/172.16.2.95.md"
+    },
+    {
+      "id": "openedx-dev",
+      "host": "10.2.1.132",
+      "sshAlias": "openedx-dev",
+      "port": 22,
+      "user": "adminedx",
+      "enabled": true,
+      "purpose": "Open edX DESARROLLO (estudiante-desarrollo.gmontecristo.com) - Tutor 17.0.5 (Docker) sobre Ubuntu 20.04; el sitio lo sirve el stack tutor_local-*",
+      "docFile": "docs/servers/openedx-dev.md",
+      "note": "Clave privada RSA 4096 en env/keyopenedx-dev.pem dentro del repo (mismo patron que el openedx de produccion, excepcion conocida), no en %USERPROFILE%\\.ssh\\. Distinto del openedx de produccion (135.119.204.153)"
+    },
+    {
+      "id": "172.16.16.193",
+      "host": "172.16.16.193",
+      "sshAlias": "172.16.16.193",
+      "port": 22,
+      "user": "administrator",
+      "enabled": false,
+      "purpose": "pampa api prod",
+      "docFile": "docs/servers/172.16.16.193.md",
+      "note": "Registrado 2026-10-30 sin validar: server caido por corte de luz en su sitio al momento del registro (PuTTY y el host del hub dan Connection timed out). Ademas la subred UAT 172.16.16.x no tiene ruta desde el hub 10.1.0.200 (sale por el borde 190.113.100.74), asi que la conexion debe validarse desde un host con ruta a esa subred. enabled=false hasta confirmar SSH. Credencial en env/.env como PAMPAAPI_193_IP/USER/PASS"
     }
   ]
 }

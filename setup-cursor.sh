@@ -35,7 +35,7 @@ echo ""
 # ============================================================
 # 1. Verificar dependencias
 # ============================================================
-echo "--- [1/7] Verificando dependencias ---"
+echo "--- [1/8] Verificando dependencias ---"
 
 check_dep() {
   if command -v "$1" &>/dev/null; then
@@ -69,7 +69,7 @@ fi
 # 2. Verificar / descargar aks-mcp Linux
 # ============================================================
 echo ""
-echo "--- [2/7] Verificando aks-mcp ---"
+echo "--- [2/8] Verificando aks-mcp ---"
 
 AKS_MCP_DIR="$REPO_ROOT/.local/aks/tools/aks-mcp/v0.0.20"
 AKS_MCP_BIN="$AKS_MCP_DIR/aks-mcp"
@@ -94,7 +94,7 @@ fi
 # 3. Cargar variables de entorno desde .env
 # ============================================================
 echo ""
-echo "--- [3/7] Cargando variables de entorno ---"
+echo "--- [3/8] Cargando variables de entorno ---"
 
 ENV_FILE="$REPO_ROOT/env/.env"
 if [[ -f "$ENV_FILE" ]]; then
@@ -114,7 +114,7 @@ fi
 # 4. Comprobar subagentes de Cursor (viven en el repo)
 # ============================================================
 echo ""
-echo "--- [4/7] Comprobando subagentes en .cursor/agents/ ---"
+echo "--- [4/8] Comprobando subagentes en .cursor/agents/ ---"
 
 AGENTS_SRC="$REPO_ROOT/.cursor/agents"
 if [[ -d "$AGENTS_SRC" ]]; then
@@ -131,7 +131,7 @@ fi
 # 5. Comprobar skills de Cursor (viven en el repo)
 # ============================================================
 echo ""
-echo "--- [5/7] Comprobando skills en .cursor/skills/ ---"
+echo "--- [5/8] Comprobando skills en .cursor/skills/ ---"
 
 SKILLS_SRC="$REPO_ROOT/.cursor/skills"
 if [[ -d "$SKILLS_SRC" ]]; then
@@ -145,7 +145,7 @@ fi
 # 6. Agregar REPO_ROOT al .bashrc del usuario (si no está)
 # ============================================================
 echo ""
-echo "--- [6/7] Configurando REPO_ROOT en el shell ---"
+echo "--- [6/8] Configurando REPO_ROOT en el shell ---"
 
 BASHRC="$HOME/.bashrc"
 MARKER_BEGIN="# stack-cursor"
@@ -168,7 +168,7 @@ export REPO_ROOT
 # 7. Comprobar rules, hook y MCP de este repo
 # ============================================================
 echo ""
-echo "--- [7/7] Comprobando rules, hook y MCP ---"
+echo "--- [7/8] Comprobando rules, hook y MCP ---"
 
 RULES_DIR="$REPO_ROOT/.cursor/rules"
 if [[ -d "$RULES_DIR" ]]; then
@@ -206,6 +206,28 @@ else
   warn "Kubeconfig no legible en $KUBE"
 fi
 
+
+# ============================================================
+# 8. az login — Managed Identity y, si falla, Service Principal
+# ============================================================
+echo ""
+echo "--- [8/8] Autenticando az (Managed Identity > Service Principal) ---"
+if [ -n "${KIRO_AZURE_MI_CLIENT_ID:-}" ] && az login --identity --client-id "$KIRO_AZURE_MI_CLIENT_ID" --output none 2>/dev/null; then
+  ok "az autenticado con Managed Identity (${KIRO_AZURE_MI_NAME:-id-kiro-agent-hub})"
+elif [ -n "${AZURE_CLIENT_ID:-}" ] && [ -n "${AZURE_CLIENT_SECRET:-}" ]; then
+  if az login --service-principal \
+      -u "$AZURE_CLIENT_ID" \
+      -p "$AZURE_CLIENT_SECRET" \
+      --tenant "$AZURE_TENANT_ID" \
+      --output none 2>/dev/null; then
+    ok "az autenticado como Service Principal (fallback)"
+  else
+    warn "az login SP falló -- verificar variables en env/.env"
+  fi
+else
+  warn "Ni Managed Identity ni Service Principal disponibles -- az login omitido"
+fi
+
 # ============================================================
 # Resumen final
 # ============================================================
@@ -224,8 +246,8 @@ echo ""
 echo "  Abrir en Cursor por Remote SSH:"
 echo "    usuario adoadmin, carpeta $REPO_ROOT"
 echo ""
-echo "  Si faltan credenciales de Azure o de kubectl:"
-echo "    1. Completar env/.env"
-echo "    2. az login --use-device-code"
+echo "  Si az no quedó autenticado:"
+echo "    1. Completar AZURE_CLIENT_ID, AZURE_CLIENT_SECRET y AZURE_TENANT_ID en env/.env"
+echo "    2. Volver a correr ./setup-cursor.sh"
 echo "    3. kubectl config use-context <cluster>"
 echo ""

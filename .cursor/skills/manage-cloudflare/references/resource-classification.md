@@ -30,7 +30,7 @@ Cargar en modo `classify`. Implementado en `cloudflare-security-gate.ps1`
 ## Eliminación — siempre aprobación destructiva separada
 
 Clasificar por EFECTO, no solo por verbo HTTP (ver
-`.claude/rules/cloudflare/security.md` § Eliminación lógica para la lista
+`.cursor/rules/cloudflare.mdc` (sección Eliminación lógica) para la lista
 completa). Patrones reconocidos estáticamente por el hook:
 
 | Patrón | Clasificación |

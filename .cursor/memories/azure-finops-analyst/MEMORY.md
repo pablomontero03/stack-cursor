@@ -22,12 +22,12 @@ de facturación, ni datos que deban vivir en `.local/`.
 ## Aprendizajes esenciales
 
 - El MCP `azure` está diferido (ver
-  `.claude/rules/azure/authorization.md`) — este agente trabaja 100% con
+  `.cursor/rules/azure.mdc`) — este agente trabaja 100% con
   Azure CLI/`az rest`, vía los scripts de `.claude/skills/analyze-azure-costs/scripts/`.
 - El endpoint de Cost Management Query/Forecast usa HTTP POST pero es de
   solo lectura — `azure-security-gate.ps1` lo clasifica como lectura
   automática únicamente para la suscripción `69dc43ec-...` y un esquema
-  de `--body` exacto (ver `.claude/rules/azure/security.md` § Caso
+  de `--body` exacto (ver `.cursor/rules/azure.mdc` § Caso
   especial). Cualquier otra suscripción/ruta/clave de body sigue
   preguntando.
 - `az consumption reservation summary list` exige un `reservation-order-id`
@@ -40,3 +40,15 @@ de facturación, ni datos que deban vivir en `.local/`.
   automáticamente.
 
 Última revisión: 2026-09-03 (creación inicial del agente).
+
+## Regla operacional: no ejecutar setup.sh de Kiro
+Confirmado en producción 2026-09-21. No ejecutar `setup-kiro.sh`. `./setup-cursor.sh` no reinicia el worker.
+
+**Siempre usar en sesiones activas de Crew:**
+```bash
+set -a; source /home/cursor/stack-cursor/env/.env; set +a
+export REPO_ROOT=/home/cursor/stack-cursor
+```
+O con el flag seguro: `set -a; source env/.env; set +a`
+
+No ejecutar `source ./setup.sh`. Para variables: `set -a; source env/.env; set +a`.

@@ -83,6 +83,16 @@ INPUT:
     development: ./deployment-dev.yml   # nombres fijos generados por File Creator -- no suelen cambiar por app
     uat: ./deployment-uat.yml
     production: ./deployment-prod.yml
+    # IMPORTANTE: los 3 manifests DEBEN contener los 6 objetos completos del modelo:
+    #   Secret + ConfigMap + Deployment (imagePullSecrets, volumes, probes startup/
+    #   liveness/readiness, lifecycle.preStop, securityContext, tokens reqcpu/reqmem/
+    #   limcpu/limmem) + Service ClusterIP + Ingress (TLS + anotaciones nginx) + HPA.
+    # Modelo de referencia: .local/azure-devops/manifests/buklo-directory-web/deployment-dev.yml
+    # Un manifest que solo tenga ConfigMap+Deployment+Service está INCOMPLETO.
+    #
+    # Diferencias Ingress por ambiente:
+    #   Dev / UAT: ingressClassName: nginx        | secretName: gmontecristo-secret
+    #   Prod:      ingressClassName: internal-ingress | secretName: grupomontecristo-cert-secret
 
   environments:
     development:
@@ -133,9 +143,18 @@ INPUT:
     run_development_after_plan_approval: true
     run_uat_after_development_success: true
     prepare_production: true
+    # IMPORTANTE: prepare_production=false significa "no EJECUTAR Producción en este
+    # ciclo de prueba", NO "omitir el stage". La Release definition SIEMPRE debe
+    # incluir el stage Producción con approvalRequired=true. El VG Produccion-* y el
+    # manifest deployment-prod.yml también deben crearse siempre.
     production_requires_separate_approval: true
     allow_application_code_changes: false
     allow_deletions: false
+    agentic_mode: "off"    # "off" = comportamiento normal (humano en cada paso).
+                           # "on"  = ejecucion desatendida del tramo no productivo.
+                           # Default global: .cursor/agentic-mode.json
+                           # NUNCA sube el techo de seguridad: Produccion y
+                           # eliminaciones siguen requiriendo aprobacion separada.
 ```
 
 ## Interpretación de entradas
@@ -179,7 +198,7 @@ Una sola aprobación cubre exactamente:
 - Ejecutar y validar Desarrollo, y luego UAT, cuando este documento ya
   enumeró explícitamente que se van a ejecutar (regla del dominio ADO
   actualizada 2026-09-08 para permitir esto en una sola aprobación — ver
-  `.claude/rules/azure-devops-pipelines/authorization.md` § "Preguntar
+  `.cursor/rules/azure-devops.mdc` § "Preguntar
   una vez por operación atómica").
 - Aplicar correcciones dentro de la envolvente y límite aprobado.
 - Ejecutar polling, readback, journals y actualización de memorias correspondiente.

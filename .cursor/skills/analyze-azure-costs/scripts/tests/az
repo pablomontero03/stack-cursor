@@ -1,0 +1,2 @@
+#!/bin/sh
+exec pwsh -NoProfile -File "/home/cursor/stack-cursor/.cursor/skills/analyze-azure-costs/scripts/tests/az-stub.ps1" "$@"

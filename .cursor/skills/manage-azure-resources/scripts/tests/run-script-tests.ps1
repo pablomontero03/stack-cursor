@@ -10,7 +10,21 @@ $testRoot = Join-Path $PSScriptRoot 'tmp'
 if (Test-Path -LiteralPath $testRoot) { Remove-Item -LiteralPath $testRoot -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $testRoot | Out-Null
 
-$env:PATH = "$PSScriptRoot;$env:PATH"
+$pathSep = [System.IO.Path]::PathSeparator
+$isWindows = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)
+
+# En Linux, az.cmd no es ejecutable; crear un stub shell que delegue a pwsh az-stub.ps1
+if (-not $isWindows) {
+    $azStubShell = Join-Path $PSScriptRoot 'az'
+    $azStubPs1 = Join-Path $PSScriptRoot 'az-stub.ps1'
+    @"
+#!/bin/sh
+exec pwsh -NoProfile -File "$azStubPs1" "`$@"
+"@ | Set-Content -LiteralPath $azStubShell -Encoding utf8
+    chmod +x $azStubShell
+}
+
+$env:PATH = "${PSScriptRoot}${pathSep}${env:PATH}"
 
 . (Join-Path $scriptsRoot 'Azure-Common.ps1')
 

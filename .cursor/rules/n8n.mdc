@@ -32,6 +32,25 @@ Si la instancia sigue sin quedar clara → **preguntar antes de ejecutar cualqui
 - Nunca reducir el schedule de un workflow de producción a un intervalo de prueba sin ventana controlada y aprobación.
 - Nunca asumir tamaño fijo de un pack al clonar: listar dinámicamente los workflows de la carpeta/etiqueta origen.
 
+## Ciclo de construcción de un workflow (tools nativas del MCP)
+
+Al crear o modificar un workflow, usar el ciclo del MCP `n8n-interno`/`n8n-productivo` en orden; no inventar manifiestos ni llamar la API cruda. **Validar que pase NO es suficiente** (confirma formas, no lógica): verificar conexiones y testear antes de activar.
+
+1. `get_workflow_best_practices` — paso de planeación obligatorio (nodos recomendados, patrones, pitfalls por técnica).
+2. `search_nodes` → `get_node_types` → `explore_node_resources` — descubrir nodos reales y aterrizar RLC/credenciales con `list_credentials` (nunca inventar IDs).
+3. `get_workflow_sdk_reference` antes de escribir código SDK; `validate_node_config` al escribir cada nodo.
+4. `validate_workflow` sobre el JSON completo; corregir cada error y revalidar.
+5. `prepare_workflow_pin_data` + `test_workflow` — testear con pin data. **Los side effects reales se disparan en el test** (writes, mensajes, APIs): confirmar con el usuario o usar datos seguros.
+6. `publish_workflow` solo tras pasar lo anterior — y activar es acción **con aprobación separada** (ver arriba).
+
+### Higiene del JSON de nodo (rompe la UI de n8n aunque valide)
+
+Tres errores estructurales en el JSON de un nodo pasan la validación pero **corrompen la UI** de n8n:
+
+- **Nunca emitir un bloque `credentials` con ID placeholder** (`"id": "REPLACE_ME"` o similar): deja el selector de credenciales permanentemente deshabilitado ("No credentials yet") y el usuario tiene que recrear el nodo. Si no se conoce el ID real, **omitir el bloque `credentials`** (muestra un dropdown vacío normal, clickeable); para usar el ID real, descubrirlo antes con `list_credentials`.
+- **`id` de nodo = UUID v4**, nunca un string legible (`"http-node"`): el frontend de n8n usa el id para el binding de formularios y la inicialización del componente de credenciales; un id no-UUID causa fallos sutiles de UI.
+- **Usar el `typeVersion` vigente** de cada nodo — confirmarlo con `get_node_types`, no hardcodear versiones recordadas de memoria (quedan desactualizadas).
+
 ## Fuentes de verdad
 
 - Skill: `.cursor/skills/manage-n8n-monitoring/SKILL.md`

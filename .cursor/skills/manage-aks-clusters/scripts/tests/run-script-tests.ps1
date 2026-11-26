@@ -234,8 +234,12 @@ catch {
 # --- Mismatch de contexto: requiere mockear kubectl config current-context ---
 $stubDir = Join-Path $testRoot 'stub-path'
 New-Item -ItemType Directory -Force -Path $stubDir | Out-Null
-$stubKubectl = Join-Path $stubDir 'kubectl.cmd'
-@'
+
+# Stub portable: .cmd en Windows, script shell sin extension en Linux/macOS
+$isWindows = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)
+if ($isWindows) {
+    $stubKubectl = Join-Path $stubDir 'kubectl.cmd'
+    @'
 @echo off
 if "%1"=="config" if "%2"=="current-context" (
   echo otro-contexto-distinto
@@ -243,10 +247,23 @@ if "%1"=="config" if "%2"=="current-context" (
 )
 exit /b 1
 '@ | Set-Content -LiteralPath $stubKubectl -Encoding ascii
+} else {
+    $stubKubectl = Join-Path $stubDir 'kubectl'
+    @'
+#!/bin/sh
+if [ "$1" = "config" ] && [ "$2" = "current-context" ]; then
+  echo "otro-contexto-distinto"
+  exit 0
+fi
+exit 1
+'@ | Set-Content -LiteralPath $stubKubectl -Encoding utf8
+    chmod +x $stubKubectl
+}
 
 $originalPath = $env:PATH
+$pathSep = [System.IO.Path]::PathSeparator
 try {
-    $env:PATH = "$stubDir;$originalPath"
+    $env:PATH = "${stubDir}${pathSep}${originalPath}"
     & (Join-Path $scriptsRoot 'Apply-AksChangePlan.ps1') -PlanPath $planOkPath | Out-Null
     Add-Result 'Apply-AksChangePlan: rechaza si el contexto actual no coincide con el del plan' $false 'no lanzo excepcion'
 }
@@ -274,8 +291,9 @@ try {
 
     $stubLogPath = Join-Path $testRoot 'stub-invocations.log'
     if (Test-Path -LiteralPath $stubLogPath) { Remove-Item -LiteralPath $stubLogPath -Force }
-    $loggingStubKubectl = Join-Path $stubDir 'kubectl.cmd'
-    @"
+    $loggingStubKubectl = if ($isWindows) { Join-Path $stubDir 'kubectl.cmd' } else { Join-Path $stubDir 'kubectl' }
+    if ($isWindows) {
+        @"
 @echo off
 echo %* >> "$stubLogPath"
 if "%1"=="config" if "%2"=="current-context" (
@@ -284,10 +302,22 @@ if "%1"=="config" if "%2"=="current-context" (
 )
 exit /b 1
 "@ | Set-Content -LiteralPath $loggingStubKubectl -Encoding ascii
+    } else {
+        @"
+#!/bin/sh
+echo `$* >> "$stubLogPath"
+if [ "`$1" = "config" ] && [ "`$2" = "current-context" ]; then
+  echo "gmon-innovacion-aks-eastus2-0001"
+  exit 0
+fi
+exit 1
+"@ | Set-Content -LiteralPath $loggingStubKubectl -Encoding utf8
+        chmod +x $loggingStubKubectl
+    }
 
     $originalPath2 = $env:PATH
     try {
-        $env:PATH = "$stubDir;$originalPath2"
+        $env:PATH = "${stubDir}${pathSep}${originalPath2}"
         try { & (Join-Path $scriptsRoot 'Apply-AksChangePlan.ps1') -PlanPath $planKcResult.outPath | Out-Null } catch { }
     }
     finally {

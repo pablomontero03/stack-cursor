@@ -4,7 +4,7 @@ Invoke-CloudflareApiRequest via el mismo seam global que
 run-script-tests.ps1 -- cero llamadas de red reales.
 
 Uso:
-  powershell -NoProfile -ExecutionPolicy Bypass -File .\run-dns-resolve-tests.ps1
+  pwsh -NoProfile -File .\run-dns-resolve-tests.ps1
 #>
 
 $ErrorActionPreference = 'Stop'

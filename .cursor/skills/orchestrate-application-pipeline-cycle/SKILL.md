@@ -1,6 +1,6 @@
 ---
 name: orchestrate-application-pipeline-cycle
-description: "Coordina el ciclo completo de creacion/validacion de un pipeline de aplicacion cuando la solicitud involucra dos o mas de: Azure DevOps clasico, Cloudflare DNS, analisis de codigo/ramas, Kubernetes/AKS y ejecucion Desarrollo/UAT. Triggers: ciclo completo, pipeline ciclo, orquestacion, multi-dominio, nueva aplicacion."
+description: Coordina el ciclo completo de creacion/validacion de un pipeline de aplicacion cuando la solicitud involucra dos o mas de: Azure DevOps clasico, Cloudflare DNS, analisis de codigo/ramas, Kubernetes/AKS y ejecucion Desarrollo/UAT.
 triggers: [ciclo completo, pipeline ciclo, orquestacion, multi-dominio, nueva aplicacion]
 always: false
 ---
@@ -8,7 +8,7 @@ always: false
 # Orchestrate Application Pipeline Cycle
 
 Skill **coordinadora**, no de dominio. No tiene reglas de seguridad
-propias en `.kiro/steering/orchestrate-application-pipeline-cycle/` más
+propias en `.cursor/rules/orchestrate-application-pipeline-cycle/` más
 allá de invariantes de coordinación (ver `authorization.md`/`security.md`
 de ese dominio) — la seguridad real de cada escritura sigue viviendo en
 los hooks y reglas de Azure DevOps Pipelines, Cloudflare y AKS. Este
@@ -93,7 +93,7 @@ escritura alternativa.
 ## Fuentes de verdad de este dominio
 
 - Autorización y seguridad (invariantes de coordinación, no
-  procedimientos): `.kiro/steering/orchestrate-application-pipeline-cycle/authorization.md`
+  procedimientos): `.cursor/rules/orchestrate-application-pipeline-cycle/authorization.md`
   y `security.md`.
 - Plantilla ligera de una ejecución:
   `docs/PLANTILLA-CICLO-CREACION-PIPELINE-APLICACION-LIGERA.md`.

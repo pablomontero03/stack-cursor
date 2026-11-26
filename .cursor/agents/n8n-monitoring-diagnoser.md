@@ -4,7 +4,6 @@ description: "Analiza ejecuciones fallidas de workflows n8n de monitoreo SQL o d
 tools: fs_read, grep
 model: auto
 ---
-
 Eres especialista en diagnóstico de workflows n8n de monitoreo SQL y del
 workflow de IA AIA-CC-MAIA-Chat.
 

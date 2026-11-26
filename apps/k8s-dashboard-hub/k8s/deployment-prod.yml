@@ -1,0 +1,201 @@
+---
+# ConfigMap: parámetros del hub
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8s-hub-config
+  namespace: tools-devops
+data:
+  PORT: "8080"
+  HOST: "0.0.0.0"
+  HUB_BASE_URL: "https://k8s-hub.grupomontecristo.com"
+---
+# Deployment: k8s-dashboard-hub
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-dashboard-hub
+  namespace: tools-devops
+  labels:
+    app: k8s-dashboard-hub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-dashboard-hub
+  template:
+    metadata:
+      labels:
+        app: k8s-dashboard-hub
+    spec:
+      containers:
+        - name: k8s-dashboard-hub
+          image: gmonhubacreastus20001.azurecr.io/k8s-dashboard-hub-prod:#{Build.BuildNumber}#
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: k8s-hub-config
+          resources:
+            requests:
+              cpu: "20m"
+              memory: "48Mi"
+            limits:
+              cpu: "80m"
+              memory: "96Mi"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          volumeMounts:
+            # Monta server.js desde ConfigMap para permitir hotfixes sin rebuild
+            # El ConfigMap k8s-hub-server se actualiza con:
+            # kubectl create configmap k8s-hub-server --from-file=server.js=apps/k8s-dashboard-hub/src/server.js --dry-run=client -o yaml | kubectl apply -f -
+            - name: server-js
+              mountPath: /app/src/server.js
+              subPath: server.js
+      volumes:
+        - name: server-js
+          configMap:
+            name: k8s-hub-server
+      imagePullSecrets:
+        - name: acr-secret
+---
+# Service: k8s-dashboard-hub
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-dashboard-hub
+  namespace: tools-devops
+spec:
+  selector:
+    app: k8s-dashboard-hub
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+# Deployment: oauth2-proxy (Azure AD SSO)
+# Reutiliza la misma App Registration 45f7a5e0 del k8s-dashboard y cicd-dashboard.
+# Requiere secret 'oauth2-proxy-k8s-hub-secret' en el namespace (aplicar manualmente una vez).
+# Sesiones en Redis db=2 (db=0=k8s-dashboard, db=1=cicd-dashboard, db=2=k8s-hub).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy-k8s-hub
+  namespace: tools-devops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oauth2-proxy-k8s-hub
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy-k8s-hub
+    spec:
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:latest
+          args:
+            - --provider=azure
+            - --azure-tenant=33dd4184-3068-47da-891d-a70e02f8c0c9
+            - --client-id=45f7a5e0-ac18-4417-9949-934af65a25d2
+            - --client-secret-file=/etc/oauth2-proxy/client-secret
+            - --cookie-secret-file=/etc/oauth2-proxy/cookie-secret
+            - --redirect-url=https://k8s-hub.grupomontecristo.com/oauth2/callback
+            - --upstream=http://k8s-dashboard-hub.tools-devops.svc.cluster.local:8080
+            - --http-address=0.0.0.0:4180
+            - --reverse-proxy=true
+            - --cookie-name=oauth2_proxy_k8s_hub
+            - --cookie-path=/
+            - --cookie-secure=true
+            - --cookie-samesite=none
+            - --cookie-expire=5h
+            - --email-domain=grupomontecristo.com
+            - --skip-provider-button=true
+            - --oidc-issuer-url=https://login.microsoftonline.com/33dd4184-3068-47da-891d-a70e02f8c0c9/v2.0
+            - --whitelist-domain=.grupomontecristo.com
+            - --upstream-timeout=30s
+            - --session-store-type=redis
+            - --redis-connection-url=redis://oauth2-redis.kubernetes-dashboard.svc.cluster.local:6379/2
+            - --pass-user-headers=true
+            - --set-xauthrequest=true
+            - --skip-auth-route=GET=/teams-config
+            - --skip-auth-route=HEAD=/teams-config
+            - --skip-auth-route=GET=/teams-tab
+            - --skip-auth-route=HEAD=/teams-tab
+            - --skip-auth-route=^/api/
+            - --skip-auth-route=POST=^/api/
+            - --skip-auth-route=^/proxy/
+            - --oidc-email-claim=upn
+          ports:
+            - containerPort: 4180
+          resources:
+            requests:
+              cpu: "15m"
+              memory: "48Mi"
+            limits:
+              memory: "96Mi"
+          volumeMounts:
+            - mountPath: /etc/oauth2-proxy
+              name: oauth2-proxy-secret
+              readOnly: true
+      volumes:
+        - name: oauth2-proxy-secret
+          secret:
+            secretName: oauth2-proxy-k8s-hub-secret
+            items:
+              - key: oauth2-proxy-client-secret
+                path: client-secret
+              - key: cookie-secret
+                path: cookie-secret
+---
+# Service: oauth2-proxy-k8s-hub
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy-k8s-hub
+  namespace: tools-devops
+spec:
+  selector:
+    app: oauth2-proxy-k8s-hub
+  ports:
+    - port: 80
+      targetPort: 4180
+---
+# Ingress — tráfico al oauth2-proxy
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: k8s-hub-ingress
+  namespace: tools-devops
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - k8s-hub.grupomontecristo.com
+      secretName: grupomontecristo-cert-secret
+  rules:
+    - host: k8s-hub.grupomontecristo.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: oauth2-proxy-k8s-hub
+                port:
+                  number: 80

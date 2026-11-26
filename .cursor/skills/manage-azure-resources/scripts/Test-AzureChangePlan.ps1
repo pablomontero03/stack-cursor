@@ -1,7 +1,7 @@
 <#
 Valida un plan generado por New-AzureChangePlan.ps1 y, si pasa todos los
 bloqueantes, lo marca validated=true + validationHash (SHA-256 canonico).
-Bloqueantes (ver .kiro/rules/azure/security.md):
+Bloqueantes (ver .cursor/rules/azure.mdc):
 
   - Secretos: escaneo por NOMBRE de propiedad Y por regex sobre el texto
     crudo del archivo (Find-AzureSensitiveJsonProperties /

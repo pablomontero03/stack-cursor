@@ -26,6 +26,18 @@ param(
     [Nullable[int]]$ExistingBuildDefinitionId,
     [string]$BuildDefinitionName,
 
+    # ---- Solo para -Kind Build (agregado 2026-10-29). Inputs del step del
+    # task group de build que REEMPLAZAN los 6 defaults de Build-MultiStage.
+    # ADITIVO: si se omite ($null), el comportamiento es IDENTICO al historico
+    # (New-AdoBuildDefinitionPayload usa sus 6 inputs estandar). Se usa cuando
+    # el task group de build expone inputs extra -- p.ej. un clon de
+    # Build-MultiStage que expone 'arguments' para pasar 'docker build
+    # --target <stage>' (caso service-bdip worker). La hashtable debe traer
+    # TODOS los inputs que el step necesita (los 6 base MAS los extra), porque
+    # reemplaza el set completo, no lo fusiona. El task group destino se sigue
+    # resolviendo por plan.dependencies.buildTaskGroup (nombre/id), nunca aqui. ----
+    [hashtable]$BuildTaskGroupInputs,
+
     # ---- Solo para -Kind StandaloneBuild (agregado 2026-08-27, ver
     # New-AdoStandaloneBuildDefinitionPayload en New-AdoClassicPayloads.ps1
     # para el detalle completo de cada default). $StepsSpecPath es un JSON
@@ -95,7 +107,11 @@ switch ($Kind) {
             uat  = Get-Content -LiteralPath $DeploymentUatYamlPath -Raw -Encoding UTF8
             prod = Get-Content -LiteralPath $DeploymentProdYamlPath -Raw -Encoding UTF8
         }
-        $body = New-AdoBuildDefinitionPayload -Plan $plan -DeploymentManifests $manifests
+        $body = if ($BuildTaskGroupInputs) {
+            New-AdoBuildDefinitionPayload -Plan $plan -DeploymentManifests $manifests -BuildTaskGroupInputs $BuildTaskGroupInputs
+        } else {
+            New-AdoBuildDefinitionPayload -Plan $plan -DeploymentManifests $manifests
+        }
         $uri = "$($script:AdoCoreBaseUrl)/$($plan.project)/_apis/build/definitions?api-version=$($script:AdoApiVersion)"
     }
     'Release' {
@@ -143,6 +159,15 @@ switch ($Kind) {
                 # llegar aca por falta de -ExistingBuildDefinitionId).
                 deployTaskGroupInputs = $_.deployTaskGroupInputs
                 approvalRequired      = [bool]$_.approvalRequired
+            }
+            # Approver de la aprobacion MANUAL (fix 2026-10-29): solo tiene
+            # sentido cuando approvalRequired=true. Se pasan tal cual al payload,
+            # que emite approver={id} y setea releaseCreatorCanBeApprover.
+            if ($_.PSObject.Properties['approverId'] -and -not [string]::IsNullOrWhiteSpace([string]$_.approverId)) {
+                $entry['approverId'] = [string]$_.approverId
+            }
+            if ($_.PSObject.Properties['releaseCreatorCanBeApprover']) {
+                $entry['releaseCreatorCanBeApprover'] = [bool]$_.releaseCreatorCanBeApprover
             }
             if ($_.PSObject.Properties['reportarResultadoTaskGroupId'] -and -not [string]::IsNullOrWhiteSpace([string]$_.reportarResultadoTaskGroupId)) {
                 $entry['reportarResultadoTaskGroupId'] = [string]$_.reportarResultadoTaskGroupId

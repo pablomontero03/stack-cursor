@@ -652,15 +652,21 @@ los ambientes, no específicas de un ambiente.
 **Prevención**: Revisar un Release existente (#400) para ver dónde están estas
 variables antes de crear uno nuevo.
 
-## Patrón: servicesname SIEMPRE en lowercase (2026-11-24)
+## Patrón: servicesname SIEMPRE `<sistema>-<app>` lowercase (2026-11-24)
 
-Kubernetes requiere que todos los nombres de servicios sean en minúsculas.
-El valor de `servicesname` en Variable Groups debe seguir esta convención.
+Kubernetes requiere nombres en minúsculas. En **Optica-Ecosystem** el
+`servicesname` de los Variable Groups **debe** llevar el prefijo del
+producto (lección 2026-11-24: ciclos inventario/laboratorio/pacientes/rrhh
+usaron el short-name y hubo que borrar+redeploy).
 
-**Formato correcto**:
-- ✅ `optica-ecosystem-auth-api` (lowercase, descriptivo)
-- ❌ `Optica-Ecosystem-auth-api` (mayúsculas iniciales)
-- ❌ `auth-api` (muy genérico, no identifica el sistema)
+**Formato correcto (APIs Optica)**:
+- ✅ `optica-ecosystem-auth-api` / `optica-ecosystem-tickets-api` / `optica-ecosystem-rrhh-api`
+- ❌ `Optica-Ecosystem-auth-api` (mayúsculas)
+- ❌ `auth-api` / `rrhh-api` / `tickets-api` / `ticketing-web` (sin sistema)
+
+**`image` (Build/VG)**: se mantiene el short con guion final para el
+sufijo de ambiente, como auth-api — ej. `image=tickets-api-` →
+`tickets-api-dev`. El nombre K8s lo define solo `servicesname`.
 
 **Implementación**:
 

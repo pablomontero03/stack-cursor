@@ -1,0 +1,25 @@
+{
+  "agentic_run_id": "hr-web-redeploy-20260914",
+  "app_id": "mod-ag-test-hr-web",
+  "started_at": "2026-09-14T18:14:12Z",
+  "phase": "pod-running",
+  "input_hash": "redeploy-batch-20260914",
+  "plan_validation_hash": "",
+  "ado": {
+    "build_id": 22432,
+    "release_definition_id": 396,
+    "release_instance_dev": 7299,
+    "release_instance_uat": null,
+    "namespace": "mod-ag-test-dev",
+    "namespace_uat": "mod-ag-test-uat",
+    "servicesname": "mod-ag-test-hr-web"
+  },
+  "last_observed": {
+    "domain": "phase-change",
+    "state": "pod-running",
+    "at": "2026-09-14T18:20:44Z"
+  },
+  "observations": [],
+  "outcome": "pending",
+  "error": ""
+}

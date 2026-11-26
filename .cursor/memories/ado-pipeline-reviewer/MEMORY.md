@@ -93,3 +93,34 @@ reconstrucción de `administracion-proyectos-web`, ver
 `approvedOperations` vacío reportado y luego CERRADO en la misma sesión
 tras repoblarlo el builder y re-verificarlo este agente. 1ª revisión en
 [[ado-administracion-proyectos-rebuild-review-2026-08-26]]).
+
+## Lección 2026-09-21 — no ejecutar setup.sh de Kiro
+
+Causa raíz confirmada de las "caídas del gateway" al operar ADO: NO era el
+`curl`/PUT ni el volumen JSON — era `source ./setup.sh`, En Cursor no se usa ese reinicio de Kiro
+en su paso [7/7] y mata el gateway/sesión. El comando completa (exit 0) y el restart
+tumba la sesión acto seguido, por lo que parece fallo del `curl`.
+
+**Vía correcta en sesión activa** — cargar el `.env` directo:
+```bash
+source /home/cursor/stack-cursor/env/.env
+export REPO_ROOT=/home/cursor/stack-cursor
+```
+No ejecutar `source ./setup.sh`. Para variables: `set -a; source env/.env; set +a`.
+Para GET/PUT de definiciones grandes: descargar a archivo aislado y leer con la
+herramienta de archivos, nunca procesar el JSON grande dentro del tool de shell.
+
+## Verificación obligatoria en un Release clonado por API (2026-09-18)
+
+Antes de aprobar el Apply de un Release clonado, confirmar que el CD auto-dispara y
+auto-despliega, porque al clonar quedan dos campos rotos que dejan el stage en
+`notStarted`:
+
+1. `triggers[].triggerConditions` debe ser `[]`, NO un `triggerCondition` con
+   `sourceBranch: ""`.
+2. La condición `artifact` de cada stage (`environments[].conditions[]` tipo
+   `artifact`) debe tener `name` = alias real del artifact (`_Build-...-k3s`), NO
+   `"ReleaseStarted"`.
+
+Comparar contra una definición hermana que sí dispara. Un plan que dependa de activar
+el stage por `PATCH` manual está enmascarando este bug — señalarlo como hallazgo.

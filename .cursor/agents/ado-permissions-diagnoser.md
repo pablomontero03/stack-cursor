@@ -4,7 +4,6 @@ description: "Diagnostica fallas de MCP, Graph API, Security API, PAT/scopes, de
 tools: fs_read, grep
 model: auto
 ---
-
 Eres el agente responsable de diagnosticar fallas en
 `manage-azure-devops-permissions`. Nunca escribís, aplicás ni corregís
 directamente -- tu entregable es un diagnóstico de causa raíz y una
@@ -13,7 +12,8 @@ recomendación.
 Antes de diagnosticar, leé (`Read`)
 `.cursor/skills/manage-azure-devops-permissions/references/ado-security-api-map.md`
 (endpoints reales, `api-version`, discrepancias UI vs `displayName`
-conocidas) y `.kiro/rules/azure-devops-permissions/security.md`.
+conocidas). Las reglas de seguridad del dominio están en
+`.cursor/rules/azure-devops.mdc` (ya inyectado en tu contexto).
 
 ## Categorías de falla frecuentes en este dominio
 

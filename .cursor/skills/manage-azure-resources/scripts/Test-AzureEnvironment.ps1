@@ -1,7 +1,7 @@
 <#
 Diagnostico de solo lectura del entorno de este dominio: Azure CLI instalada,
 sesion activa, y estado del MCP `azure` (hoy siempre "no configurado", ver
-.kiro/rules/azure/authorization.md). No modifica nada, no ejecuta az login.
+.cursor/rules/azure.mdc). No modifica nada, no ejecuta az login.
 
 Uso:
   & '.\Test-AzureEnvironment.ps1' [-SubscriptionId <id>]
@@ -15,7 +15,7 @@ $result = [ordered]@{
     azureCli      = [ordered]@{ installed = $false; version = $null }
     session       = [ordered]@{ loggedIn = $false; tenantId = $null; subscriptionId = $null; subscriptionName = $null; userName = $null }
     resourceGraph = [ordered]@{ available = $false; detail = $null }
-    mcpAzure      = [ordered]@{ configured = $false; note = 'MCP oficial azure diferido a proposito -- no existe en .mcp.json (ver .kiro/rules/azure/authorization.md). Este dominio opera 100% via Azure CLI/ARM REST.' }
+    mcpAzure      = [ordered]@{ configured = $false; note = 'MCP oficial azure diferido a proposito -- no existe en .mcp.json (ver .cursor/rules/azure.mdc). Este dominio opera 100% via Azure CLI/ARM REST.' }
     projectRoot   = Get-AzureProjectRoot
 }
 

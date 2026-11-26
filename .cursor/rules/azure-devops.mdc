@@ -34,6 +34,8 @@ Export-AdoClassicInventory.ps1 → New-Ado*Plan.ps1 → Test-AdoPlan.ps1 → [ap
 
 Administra grupos de seguridad (`Development Team`, `Development Teams`, `Code-Reviewers`), membresías y permisos Git (nodo `All Repositories`, ramas: `feature/*`, `development`, `uat`, `release`, `main`) en proyectos de `Shared-Service-GM`.
 
+**Alcance actual y extensibilidad:** el dominio cubre grupos, membresías y permisos Git. La extensión a repos individuales, ramas y Branch Policies (PR policies) no está prohibida permanentemente — puede ampliarse cuando haya necesidad operativa, siguiendo el mismo patrón plan→validación→apply→readback. Declarar explícitamente el alcance antes de cualquier extensión.
+
 **Separado de Pipelines** — no comparte scripts, hooks, agentes ni datos transitorios con él.
 
 ### Conexión
@@ -57,8 +59,34 @@ Export-AdoPermissionsInventory.ps1 → New-AdoPermissionsPlan.ps1 → [aprobaci�
 - Nunca asumir vigente ningún id, repo, branch, pool, service connection, task group o cluster — confirmar contra el inventario en vivo.
 - No completar, aprobar ni abandonar un PR automáticamente.
 - No exponer el PAT ni valores de propiedades sensibles del plan (usar `***REDACTED***` o `${VAR}`).
+- **Horas al crear tareas (Boards):** siempre que se cree un Task en ADO Boards, PEDIR al usuario las horas y setear `Microsoft.VSTS.Scheduling.OriginalEstimate` (y `Microsoft.VSTS.Scheduling.CompletedWork` cuando aplique), en horas. Nunca inventar el número; si no lo dio, preguntarlo antes de dar la tarea por terminada.
 
 ## Fuentes de verdad
 
 - Skills: `.cursor/skills/manage-azure-devops-pipelines/SKILL.md`, `.cursor/skills/manage-azure-devops-permissions/SKILL.md`
 - Docs: `docs/azure-devops/PIPELINE-AUTOMATION-ARCHITECTURE.md`, `docs/azure-devops-permissions/PERMISSIONS-AUTOMATION-ARCHITECTURE.md`
+
+
+## Variables de entorno de apps → Azure Key Vault (estándar desde 2026-11-17)
+
+Todo pipeline Buklo (migrado o nuevo) toma sus variables de entorno de **Azure Key Vault**, no del File Creator:
+- Un vault por servicio y ambiente: **`kv-bk-<servicio>-<ambiente>`** (máx. 24 caracteres; verificar con `az keyvault check-name`). Secretos con `_`→`-` (`REDIS_HOST` → `REDIS-HOST`). Sin claves compartidas.
+- El Build tiene una tarea Azure CLI **`Key Vault sync <amb>`** (service connection `AZ CLI SPN`) que crea el vault y crea/actualiza/borra las variables desde un **catálogo** en el script; los secretos solo se crean si faltan (semilla en variables secretas `KV_*`) y se rotan en el portal.
+- El File Creator lleva `SecretStore` + `ExternalSecret` (External Secrets Operator) en vez de `Secret`/`ConfigMap` con valores. La app no cambia (`envFrom` → `#{servicesname}#-secret`).
+- Roles a nivel de RG (dev/uat `gmon_dev_rg_eastus2_0001`): pipeline = Key Vault Secrets Officer; cluster (`app-applications-uat-dev`) = Key Vault Secrets User. Owner NO da acceso a los datos.
+- Producción: plan y aprobación separados, identidades y RG prod propios.
+- Detalle completo y procedimiento: `docs/azure-devops/KEYVAULT-MIGRATION-BUKLO.md`.
+
+## Errores comunes al crear pipelines CLASSIC
+
+**Agregado 2026-11-24.** Antes de crear cualquier pipeline CLASSIC, **LEER OBLIGATORIAMENTE**:
+`.cursor/memories/ado-pipeline-builder/errores-comunes.md`
+
+Este archivo documenta los 5 errores más frecuentes y costosos (que pueden desperdiciar ~1 hora) con:
+- Síntomas exactos de cada error
+- Causas raíz y por qué fallan
+- Soluciones paso a paso
+- Scripts de readback para journal "ambiguous"
+- Checklist pre-flight obligatorio
+
+**Leer ANTES de ejecutar cualquier New-AdoClassicAksPlan.ps1 o Apply-AdoClassicPlan.ps1.**

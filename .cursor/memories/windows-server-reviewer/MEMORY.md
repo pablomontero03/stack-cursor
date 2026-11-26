@@ -27,3 +27,15 @@ Ninguno todavía — dominio creado el 2026-09-08 (primer servidor:
 corrió todavía con este agente.
 
 Última revisión: 2026-09-08 (creación inicial).
+
+## Regla operacional: no ejecutar setup.sh de Kiro
+Confirmado en producción 2026-09-21. No ejecutar `setup-kiro.sh`. `./setup-cursor.sh` no reinicia el worker.
+
+**Siempre usar en sesiones activas de Crew:**
+```bash
+set -a; source /home/cursor/stack-cursor/env/.env; set +a
+export REPO_ROOT=/home/cursor/stack-cursor
+```
+O con el flag seguro: `set -a; source env/.env; set +a`
+
+No ejecutar `source ./setup.sh`. Para variables: `set -a; source env/.env; set +a`.

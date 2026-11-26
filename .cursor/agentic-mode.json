@@ -1,0 +1,7 @@
+{
+  "_readme": "Interruptor global del modo agéntico. Valor leído por Test-ApplicationCycleInput.ps1 cuando INPUT.execution.agentic_mode no está declarado. Cambiar a 'on' habilita el modo agéntico para TODAS las corridas nuevas que no lo declaren explícitamente. Cambiar a 'off' (valor por defecto) lo deshabilita sin borrar la maquinaria. Ver docs/ROADMAP-MADUREZ.md Fase 8.",
+  "agentic_mode_default": "on",
+  "_valid_values": ["on", "off"],
+  "_security_note": "Este archivo nunca sube el techo de seguridad: con 'on', Producción y eliminaciones siguen requiriendo su aprobación separada de siempre. El modo agéntico cambia CUÁNDO se interrumpe al usuario, nunca SI se le pide permiso.",
+  "_updated": "2026-09-11"
+}

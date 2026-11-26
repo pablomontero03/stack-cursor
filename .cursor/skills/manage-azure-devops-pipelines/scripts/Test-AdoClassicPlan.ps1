@@ -123,16 +123,27 @@ function Add-Warning { param([string]$Msg) $warnings.Add($Msg) }
 # New-AdoStandaloneBuildDefinitionPayload) -- nunca crea una instancia de
 # Release ni un Variable Group, asi que varias secciones de abajo (2, 10,
 # 11) se saltan a proposito para esta familia.
-if ($plan.family -notin @('aks', 'dacpac', 'standalone-build')) {
-    Add-Blocker "family debe ser 'aks', 'dacpac' o 'standalone-build', encontrado: '$($plan.family)'."
+# 'vg-update' agregada 2026-10-14 (plan standalone para actualizar un
+# Variable Group existente, sin crear ningun Build/Release/VG nuevo).
+# Solo requiere: organization, project, variableGroupUpdate (id +
+# variables a mutar), approvedOperations con una sola entrada
+# update-variable-group. Salta casi todas las validaciones de pipeline.
+if ($plan.family -notin @('aks', 'dacpac', 'standalone-build', 'vg-update', 'tg-update', 'tg-create')) {
+    Add-Blocker "family debe ser 'aks', 'dacpac', 'standalone-build', 'vg-update', 'tg-update' o 'tg-create', encontrado: '$($plan.family)'."
 }
 
 # 2. Nombres y rutas presentes -- names.release solo se exige para
 # 'aks'/'dacpac' (que siempre planean un Release, aunque approvedOperations
-# todavia no lo incluya); 'standalone-build' nunca tiene Release.
-$releaseNameRequiredForFamily = ($plan.family -ne 'standalone-build')
-if (-not $plan.names -or -not $plan.names.build -or ($releaseNameRequiredForFamily -and -not $plan.names.release)) {
-    Add-Blocker "Faltan nombres de build/release en el plan."
+# todavia no lo incluya); 'standalone-build' nunca tiene Release;
+# 'vg-update'/'tg-update'/'tg-create' no crean Build/Release, solo tocan un
+# Variable Group o un task group.
+$releaseNameRequiredForFamily = ($plan.family -ne 'standalone-build') -and ($plan.family -ne 'vg-update') -and ($plan.family -ne 'tg-update') -and ($plan.family -ne 'tg-create')
+$buildNameRequiredForFamily = ($plan.family -ne 'vg-update') -and ($plan.family -ne 'tg-update') -and ($plan.family -ne 'tg-create')
+if ($buildNameRequiredForFamily -and (-not $plan.names -or -not $plan.names.build)) {
+    Add-Blocker "Faltan nombres de build en el plan."
+}
+if ($releaseNameRequiredForFamily -and (-not $plan.names -or -not $plan.names.release)) {
+    Add-Blocker "Faltan nombres de release en el plan."
 }
 
 # 3. Organizacion y proyecto (independiente del inventario)
@@ -141,6 +152,70 @@ if ($plan.organization -ne $RequiredOrganization) {
 }
 if ($script:AdoAllowedProjects -notcontains $plan.project) {
     Add-Blocker "plan.project debe ser uno de: $($script:AdoAllowedProjects -join ', '). Encontrado: '$($plan.project)'."
+}
+
+# 3b. Validacion especifica de familia 'vg-update': debe tener
+#     variableGroupUpdate con id (numerico) y variables (hashtable).
+#     No requiere inventario porque el VG ya existe y se pasa via
+#     -CurrentVariableGroupJson en Apply.
+if ($plan.family -eq 'vg-update') {
+    if (-not $plan.variableGroupUpdate) {
+        Add-Blocker "Falta 'variableGroupUpdate' para familia vg-update."
+    }
+    elseif (-not $plan.variableGroupUpdate.id -or $plan.variableGroupUpdate.id -notmatch '^\d+$') {
+        Add-Blocker "variableGroupUpdate.id debe ser un numero entero (ID del VG a actualizar). Encontrado: '$($plan.variableGroupUpdate.id)'."
+    }
+    elseif (-not $plan.variableGroupUpdate.variables -or ($plan.variableGroupUpdate.variables | Get-Member -MemberType NoteProperty).Count -eq 0) {
+        Add-Blocker "variableGroupUpdate.variables debe tener al menos una variable a mutar."
+    }
+}
+
+# 3c. Validacion especifica de familia 'tg-update' (agregada 2026-10-16):
+#     debe tener taskGroupUpdate con id (UUID) y body (el task group
+#     completo rev N+1 a enviar en el PUT). No requiere inventario porque
+#     el task group ya existe y su estado actual se confirma via
+#     -CurrentTaskGroupJson en Apply (compare-and-replace). El body debe
+#     traer revision (int) y tasks (array) -- es el contrato del PUT de
+#     distributedtask/taskgroups.
+if ($plan.family -eq 'tg-update') {
+    if (-not $plan.taskGroupUpdate) {
+        Add-Blocker "Falta 'taskGroupUpdate' para familia tg-update."
+    }
+    elseif (-not $plan.taskGroupUpdate.id -or $plan.taskGroupUpdate.id -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
+        Add-Blocker "taskGroupUpdate.id debe ser un UUID (ID del task group a actualizar). Encontrado: '$($plan.taskGroupUpdate.id)'."
+    }
+    elseif (-not $plan.taskGroupUpdate.body) {
+        Add-Blocker "taskGroupUpdate.body debe traer el task group completo (rev N+1) a enviar en el PUT."
+    }
+    elseif ($null -eq $plan.taskGroupUpdate.body.revision -or [string]$plan.taskGroupUpdate.body.revision -notmatch '^\d+$') {
+        Add-Blocker "taskGroupUpdate.body.revision debe ser un entero (revision del task group). Encontrado: '$($plan.taskGroupUpdate.body.revision)'."
+    }
+    elseif (-not $plan.taskGroupUpdate.body.tasks -or @($plan.taskGroupUpdate.body.tasks).Count -eq 0) {
+        Add-Blocker "taskGroupUpdate.body.tasks debe tener al menos una task (el PUT reemplaza el task group completo)."
+    }
+    elseif ([string]$plan.taskGroupUpdate.body.id -ne [string]$plan.taskGroupUpdate.id) {
+        Add-Blocker "taskGroupUpdate.body.id ('$($plan.taskGroupUpdate.body.id)') debe coincidir con taskGroupUpdate.id ('$($plan.taskGroupUpdate.id)')."
+    }
+}
+
+# 3d. Validacion especifica de familia 'tg-create' (agregada 2026-10-29):
+#     POST para crear/clonar un task group NUEVO. A diferencia de tg-update,
+#     el body NO lleva 'id' (ADO lo asigna) ni se exige 'revision'; debe traer
+#     'name' (no vacio) y 'tasks' (>=1). El bodyHash de la unica operacion
+#     (create-taskgroup) cubre la integridad del body embebido.
+if ($plan.family -eq 'tg-create') {
+    if (-not $plan.taskGroupCreate) {
+        Add-Blocker "Falta 'taskGroupCreate' para familia tg-create."
+    }
+    elseif (-not $plan.taskGroupCreate.body) {
+        Add-Blocker "taskGroupCreate.body debe traer el task group completo a crear (POST)."
+    }
+    elseif ([string]::IsNullOrWhiteSpace([string]$plan.taskGroupCreate.body.name)) {
+        Add-Blocker "taskGroupCreate.body.name debe ser el nombre (no vacio) del task group nuevo."
+    }
+    elseif (-not $plan.taskGroupCreate.body.tasks -or @($plan.taskGroupCreate.body.tasks).Count -eq 0) {
+        Add-Blocker "taskGroupCreate.body.tasks debe tener al menos una task (el POST crea el task group completo)."
+    }
 }
 
 # 4. Inventario: completitud, organizacion/proyecto y frescura -- ANTES de
@@ -379,7 +454,10 @@ function Resolve-AgentPoolDependency {
 }
 
 if (-not $plan.dependencies) {
-    Add-Blocker "El plan no tiene bloque 'dependencies' (formato desactualizado). Regenerarlo con la version actual de New-AdoClassicAksPlan.ps1 / New-AdoClassicDatabasePlan.ps1."
+    # 'vg-update'/'tg-update'/'tg-create' no necesitan dependencies (no crean Build/Release, no usan task groups/pools/SCs)
+    if ($plan.family -notin @('vg-update', 'tg-update', 'tg-create')) {
+        Add-Blocker "El plan no tiene bloque 'dependencies' (formato desactualizado). Regenerarlo con la version actual de New-AdoClassicAksPlan.ps1 / New-AdoClassicDatabasePlan.ps1."
+    }
 }
 elseif ($plan.family -eq 'aks') {
     Resolve-TaskGroupDependency -DependencyNode $plan.dependencies.buildTaskGroup -Label 'build'
@@ -392,15 +470,15 @@ elseif ($plan.family -eq 'aks') {
     # no consume una service connection de tipo Kubernetes como input de
     # Release. Exigirla ahi es un falso bloqueante -- Deployment-MultiStage-Cluster-Desarrollo
     # (Desarrollo/UAT) si la necesita, se sigue exigiendo igual que antes.
-    if ([string]$plan.dependencies.deployTaskGroup.name -ne 'Deployment-Azur-Aks-v3') {
+    # Actualizacion 2026-09-11: Deployment-MultiStage-Cluster-Desarrollo tambien esta exento
+    # porque usa una service connection SSH (172.16.2.43-desarrollo) interna del task group,
+    # no una SC de tipo kubernetes como input del Release. El deploy es SSH directo al servidor.
+    $exemptDeployTaskGroups = @('Deployment-Azur-Aks-v3', 'Deployment-MultiStage-Cluster-Desarrollo')
+    if ([string]$plan.dependencies.deployTaskGroup.name -notin $exemptDeployTaskGroups) {
         Resolve-ServiceConnectionDependency -DependencyNode $plan.dependencies.serviceConnectionAks -Label 'AKS' -ExpectedType 'kubernetes'
     }
-    elseif ($plan.dependencies.serviceConnectionAks -and $plan.dependencies.serviceConnectionAks.name) {
-        # Si el plan SI trae un nombre (app que decide usarla igual), se
-        # sigue resolviendo/validando -- la excepcion de arriba solo evita
-        # exigirla cuando el plan la deja vacia a proposito.
-        Resolve-ServiceConnectionDependency -DependencyNode $plan.dependencies.serviceConnectionAks -Label 'AKS' -ExpectedType 'kubernetes'
-    }
+    # Para task groups exentos: si el plan declara una SC (SSH o kubernetes), se verifica que
+    # existe en el inventario pero NO se valida el tipo -- el task group la gestiona internamente.
     Resolve-AgentPoolDependency -DependencyNode $plan.dependencies.agentPool -Label 'build' -Required $false
 
     # Convencion org-wide de agrupacion de merges ("gana el mas nuevo") --
@@ -438,7 +516,12 @@ $planCreatesRelease = ($approvedOpsForModeCheck.Count -eq 0) -or [bool]($approve
 $planCreatesVariableGroup = ($approvedOpsForModeCheck.Count -eq 0) -or [bool]($approvedOpsForModeCheck | Where-Object { [string]$_.operationType -eq 'create-variable-group' })
 
 if (-not $inventoryComplete) {
-    Add-Blocker "NOT_VERIFIED: 'Variable Group/Build/Release destino no duplicado' requiere -InventoryPath con un export completo y fresco."
+    # vg-update/tg-update/tg-create no necesitan inventario: el recurso ya existe
+    # (update) y se confirma via -Current*Json en Apply, o es un create de task
+    # group cuyo nombre-no-duplicado se verifica en vivo en Apply, no por inventario.
+    if ($plan.family -notin @('vg-update', 'tg-update', 'tg-create')) {
+        Add-Blocker "NOT_VERIFIED: 'Variable Group/Build/Release destino no duplicado' requiere -InventoryPath con un export completo y fresco."
+    }
 }
 else {
     if ($isUpdateOnlyPlan) {
@@ -493,13 +576,28 @@ if ($plan.family -in @('aks', 'dacpac')) {
 }
 
 # 12. Ausencia de secretos
+# Se escanea el plan EXCLUYENDO taskGroupCreate.body/taskGroupUpdate.body: esos
+# embeben SCRIPTS de deploy legitimos que contienen 'docker login
+# --password-stdin' y '--docker-password="$(containerRegistryPassword)"' (una
+# MACRO $(...), no un secreto literal) -- mismo criterio que el escaner de
+# placeholders de abajo. Su integridad la cubre el bodyHash (create/update
+# -taskgroup), no este escaner de texto. El resto del plan SI se escanea, asi
+# que un password literal real en cualquier otro campo sigue bloqueando.
+$planForSecretScanObj = $planRaw | ConvertFrom-Json
+if ($planForSecretScanObj.PSObject.Properties['taskGroupCreate'] -and $planForSecretScanObj.taskGroupCreate.PSObject.Properties['body']) {
+    $planForSecretScanObj.taskGroupCreate.PSObject.Properties.Remove('body')
+}
+if ($planForSecretScanObj.PSObject.Properties['taskGroupUpdate'] -and $planForSecretScanObj.taskGroupUpdate.PSObject.Properties['body']) {
+    $planForSecretScanObj.taskGroupUpdate.PSObject.Properties.Remove('body')
+}
+$planRawForSecretScan = $planForSecretScanObj | ConvertTo-Json -Depth 40 -Compress
 $secretPatterns = @('(?i)password\s*[:=]\s*\S+', '(?i)pat\s*[:=]\s*[a-z0-9]{20,}', '(?i)authorization\s*[:=]\s*basic\s+\S+', '(?i)connectionstring\s*[:=]\s*\S+.*(password|pwd)=')
 foreach ($p in $secretPatterns) {
-    if ($planRaw -match $p) {
+    if ($planRawForSecretScan -match $p) {
         Add-Blocker "El plan parece contener un secreto embebido (patron: $p). Revisar y quitarlo."
     }
 }
-if ($planRaw -match '(?i)AZURE_DEVOPS_PAT\s*[:=]\s*[^$]') {
+if ($planRawForSecretScan -match '(?i)AZURE_DEVOPS_PAT\s*[:=]\s*[^$]') {
     Add-Blocker "El plan referencia AZURE_DEVOPS_PAT con un valor literal en vez de un placeholder."
 }
 
@@ -523,6 +621,26 @@ if ($planRaw -match '(?i)AZURE_DEVOPS_PAT\s*[:=]\s*[^$]') {
 $planClone = $planRaw | ConvertFrom-Json
 foreach ($f in @('validationBlockers', 'validationWarnings')) {
     if ($planClone.PSObject.Properties[$f]) { $planClone.PSObject.Properties.Remove($f) }
+}
+# tg-update (2026-10-16): taskGroupUpdate.body es el task group completo,
+# que EMBEBE un script arbitrario (filecontent del File Creator). Un
+# script legitimamente contiene '<branch>' en un comentario, 'xxxx' en un
+# manifiesto de ejemplo, 'TODO' en una nota de codigo, etc. -- nada de eso
+# es un placeholder de NEGOCIO del plan. Escanear el cuerpo del script
+# daria falsos positivos perpetuos, asi que se excluye del escaneo de
+# placeholders (igual que validationBlockers/Warnings). El resto del plan
+# (description, notes, taskGroupUpdate.id, approvedOperations) SI se
+# escanea. La integridad del body esta cubierta por su bodyHash, no por
+# este escaner de texto.
+if ($planClone.PSObject.Properties['taskGroupUpdate'] -and $planClone.taskGroupUpdate.PSObject.Properties['body']) {
+    $planClone.taskGroupUpdate.PSObject.Properties.Remove('body')
+}
+# tg-create (2026-10-29): mismo criterio que taskGroupUpdate.body -- el body
+# del task group a crear EMBEBE scripts arbitrarios (filecontent, bash inline)
+# que legitimamente contienen '<...>'/'xxx'/'TODO' en comentarios o ejemplos.
+# Su integridad la cubre el bodyHash, no este escaner de texto.
+if ($planClone.PSObject.Properties['taskGroupCreate'] -and $planClone.taskGroupCreate.PSObject.Properties['body']) {
+    $planClone.taskGroupCreate.PSObject.Properties.Remove('body')
 }
 $planRawForPlaceholderScan = $planClone | ConvertTo-Json -Depth 10 -Compress
 
@@ -649,8 +767,18 @@ if ($approvedOperations.Count -gt 0) {
                 # ruta generico y confuso.
                 if ($expectedOpPath) {
                     if ([bool]$spec.requiresIdSuffix) {
-                        if ($parsedOpUri.AbsolutePath -notmatch "^$([regex]::Escape($expectedOpPath))/(\d+)$") {
-                            Add-Blocker "approvedOperations['$opIdLabel'].uri debe tener exactamente la ruta '$expectedOpPath/<id numerico>' para operationType '$opType'. Encontrada: '$($parsedOpUri.AbsolutePath)'."
+                        # idPattern: 'uuid' (task group) vs numerico por defecto
+                        # (VG/build/release) -- misma regla que
+                        # Assert-AdoOperationRequestMatchesSpec en Invoke-AdoRest.ps1.
+                        $opIdRegex = if ([string]$spec.idPattern -eq 'uuid') {
+                            '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})'
+                        }
+                        else {
+                            '(\d+)'
+                        }
+                        $opIdLabelKind = if ([string]$spec.idPattern -eq 'uuid') { 'id uuid' } else { 'id numerico' }
+                        if ($parsedOpUri.AbsolutePath -notmatch "^$([regex]::Escape($expectedOpPath))/$opIdRegex$") {
+                            Add-Blocker "approvedOperations['$opIdLabel'].uri debe tener exactamente la ruta '$expectedOpPath/<$opIdLabelKind>' para operationType '$opType'. Encontrada: '$($parsedOpUri.AbsolutePath)'."
                         }
                     }
                     elseif ($parsedOpUri.AbsolutePath -ne $expectedOpPath) {

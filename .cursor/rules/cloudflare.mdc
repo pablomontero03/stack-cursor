@@ -27,6 +27,17 @@ New-CloudflareChangePlan.ps1 → Test-CloudflareChangePlan.ps1 → [aprobación]
 - **Aprobación separada siempre** para cualquier eliminación lógica o real: purga de cache, reemplazo de Ruleset que remueve reglas, desvincular custom domain/route/binding, revocar token/certificado, `terraform destroy`, `wrangler delete`.
 - Un endpoint REST, tool MCP o subcomando no reconocido → **siempre preguntar**, nunca denegar permanentemente.
 
+## Regla OBLIGATORIA — publicar un sitio del cluster prod on-prem `.31` (prod-onprem-01)
+
+Todo hostname nuevo que se publique por internet apuntando al cluster **prod on-prem `.31` (`prod-onprem-01`, `172.16.2.31`)** requiere **DOS pasos en Cloudflare, no uno**. El `.31` **NO expone el 443 a internet**: el borde escucha en **puerto `4443`** y Cloudflare reescribe el puerto de origen por hostname mediante una **Origin Rule**. Crear solo el DNS deja el sitio en **521** aunque DNS/cert/ingress estén perfectos.
+
+1. **DNS:** registro **A → `190.113.100.74` proxied=true** (NO a `172.16.2.31`, que lo deja privado/interno).
+2. **Origin Rule:** agregar el host al ruleset **`http_request_origin`** de la zona `grupomontecristo.com` (zone `8825f873e698947fe47a6bdaafe65a61`, ruleset `667e45fc1dce47e8bca14bf203573af7`) con `action=route`, `action_parameters.origin.port=4443`. Preservar las reglas existentes (compare-and-append, nunca reemplazar el ruleset entero).
+
+Hosts ya publicados así: `grafana-onprem-01`, `datahub`, `cicd-dashboard`, `k8s-hub`, `cluster-onprem-01`, `knowledge-base`. Diagnóstico de un `521` del `.31`: NO es cert/ingress/pod ni filtro de SNI — verificar PRIMERO que el host tenga su Origin Rule `:4443`. (Confirmado 2026-10-08 publicando `knowledge-base`.)
+
+> Esto aplica solo al cluster on-prem `.31`. El `k3s-dev` (`.43`) y los AKS se publican por su propia vía (ver inventario en vivo); no asumir `4443` para otros clusters.
+
 ## Fuentes de verdad
 
 - Skill: `.cursor/skills/manage-cloudflare/SKILL.md`

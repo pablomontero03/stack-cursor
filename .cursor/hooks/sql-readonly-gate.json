@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "SQL Readonly Gate",
+      "trigger": "PreToolUse",
+      "matcher": "execute_bash",
+      "action": {
+        "type": "command",
+        "command": "bash ${REPO_ROOT}/.cursor/hooks/sql-readonly-gate.sh"
+      }
+    }
+  ]
+}

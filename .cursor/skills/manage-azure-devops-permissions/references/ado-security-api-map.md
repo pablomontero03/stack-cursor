@@ -224,3 +224,40 @@ Repositories" (ver `.claude/agent-memory/ado-permissions-builder/patterns.md`
   inconcluyente por usar el `projectId` pelado como token (namespace
   equivocado, `aclFound=false` engañoso) combinado con la forma filtrada
   ambigua en el segundo intento — no repetir esa combinación de errores.
+
+### Confirmación 2026-11-03 (Centro-Inteligencia — grupo `Development Team`, usuario `jalvarez`)
+
+Caso real que reconfirma esta sección end-to-end. Pablo agregó el grupo
+`Development Team` con **Read=Allow en los permisos de REPOS**
+(`_settings/repositories` > Security) y aun así los miembros recibían
+`401 - you do not have access` en la raíz del proyecto
+(`dev.azure.com/Shared-Service-GM/Centro-Inteligencia/`). Verificado en
+vivo (solo lectura):
+
+- `jalvarez` **sí** era miembro del grupo `Development Team`
+  (`graph/memberships` down), **sí** tenía Access Level `express`
+  (Basic) active, y su **Read efectivo** sobre los repos ya daba `True`
+  (`security/permissionevaluationbatch`, namespace Git, token
+  `repoV2/{projId}` y `repoV2/{projId}/{repoId}`). O sea, la capa Git
+  estaba perfecta — y aun así 401.
+- El 401 se destrabó **solo** al agregar el grupo en
+  `_settings/permissions` (la pantalla de **permisos de PROYECTO**, no la
+  de Repositories). Ese alta es exactamente lo que setea el
+  `Project / GENERIC_READ` ("View project-level information") descrito
+  arriba y mete al grupo en el circuito de `Project Valid Users`.
+
+**Regla operativa para un grupo NUEVO en un proyecto:** no basta una
+capa, se necesitan DOS, y son pantallas distintas:
+1. **Pertenencia al proyecto** (capa `Project` / Project Valid Users):
+   anidar el grupo en `Readers`/`Contributors`/el Team por defecto, o
+   agregarlo en `_settings/permissions`. Sin esto → 401 en la puerta del
+   proyecto, ANTES de evaluar cualquier permiso de repo.
+2. **Permiso de recursos** (capa `Git Repositories`): Read=Allow en
+   `_settings/repositories` > Security.
+
+Lo mantenible es **anidar el grupo en `Readers`** del proyecto: así cada
+persona que se agregue a `Development Team` hereda a la vez la pertenencia
+al proyecto y el Read, sin tener que tocar dos pantallas a mano cada vez.
+El descriptor del Team por defecto de este proyecto es
+`[Centro-Inteligencia]\Centro-Inteligencia Team`
+(domain `vstfs:///Classification/TeamProject/13fe5ce3-fc99-4f26-9223-9453edce740b`).

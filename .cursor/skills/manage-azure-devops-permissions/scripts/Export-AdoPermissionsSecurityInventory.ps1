@@ -210,7 +210,7 @@ foreach ($projectName in $Projects) {
         $repoEntries.Add([PSCustomObject]@{
                 repositoryId   = $repoId
                 name           = $repoName
-                defaultBranch  = [string]$repo.defaultBranch
+                defaultBranch  = if ($repo.PSObject.Properties["defaultBranch"]) { [string]$repo.defaultBranch } else { $null }
                 branchExists   = [PSCustomObject]$branchStates
                 featureBranchChildCount = $featureChildCount
             })

@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Whitelist de comandos SSH permitidos por nivel de riesgo",
+  
+  "read_only": {
+    "description": "Comandos de solo lectura - no requieren aprobación adicional",
+    "commands": [
+      "systemctl status *",
+      "systemctl is-active *",
+      "systemctl is-enabled *",
+      "journalctl -u * --since * --until * --no-pager",
+      "journalctl -u * -n * --no-pager",
+      "df -h",
+      "free -m",
+      "uptime",
+      "top -bn1",
+      "ps aux",
+      "cat /var/log/*/*.log | tail -1000",
+      "tail -n * /var/log/*",
+      "docker ps",
+      "docker ps -a",
+      "docker logs --tail * *",
+      "docker inspect *",
+      "docker-compose ps",
+      "docker-compose logs --tail * *",
+      "ls -la *",
+      "cat /etc/*",
+      "hostname",
+      "uname -a",
+      "whoami",
+      "id",
+      "netstat -tulpn",
+      "ss -tulpn",
+      "ip addr",
+      "ip route",
+      "ping -c * *",
+      "curl -sf --max-time * *",
+      "wget -q -O - --timeout=* *"
+    ]
+  },
+  
+  "controlled": {
+    "description": "Comandos con efectos - requieren aprobación individual",
+    "commands": [
+      "systemctl restart *",
+      "systemctl start *",
+      "systemctl stop *",
+      "systemctl reload *",
+      "docker restart *",
+      "docker stop *",
+      "docker start *",
+      "docker-compose up -d",
+      "docker-compose down",
+      "docker-compose restart",
+      "docker-compose pull",
+      "docker pull *"
+    ]
+  },
+  
+  "prohibited": {
+    "description": "Comandos prohibidos permanentemente",
+    "patterns": [
+      "rm -rf *",
+      "rm -r *",
+      "dd if=*",
+      "mkfs.*",
+      "fdisk *",
+      "parted *",
+      "shutdown *",
+      "reboot",
+      "init *",
+      "kill -9 *",
+      "killall *",
+      "pkill *",
+      "chmod -R *",
+      "chown -R *",
+      "iptables *",
+      "firewall-cmd *",
+      "ufw *",
+      "passwd *",
+      "useradd *",
+      "userdel *",
+      "groupadd *",
+      "groupdel *",
+      "visudo",
+      "crontab -e",
+      "crontab -r",
+      "apt remove *",
+      "apt purge *",
+      "yum remove *",
+      "dnf remove *",
+      "pip uninstall *",
+      "npm uninstall -g *"
+    ]
+  },
+  
+  "notes": {
+    "wildcard_rules": "* en los patrones significa cualquier argumento válido",
+    "validation": "Invoke-ServerCommand.ps1 valida contra esta whitelist antes de ejecutar",
+    "extension": "Agregar comandos nuevos requiere editar este archivo y documentar el caso de uso"
+  }
+}

@@ -1,0 +1,34 @@
+---
+description: "Antes de actuar en un dominio, leer skill, memoria y documentación"
+alwaysApply: true
+---
+# Antes de actuar
+
+Esta regla aplica en este repositorio (`/home/cursor/stack-cursor`). Si el workspace abierto es otro, estos archivos no están: decirlo y no inventar el procedimiento del dominio.
+
+Antes de planear, proponer comandos o cambiar algo de un dominio, leer en este orden y citar la ruta de cada archivo:
+
+1. El `SKILL.md` del dominio, completo.
+2. `MEMORY.md` y `patterns.md` de los subagentes de ese dominio, en `.cursor/memories/`.
+3. Los documentos que el skill nombra como fuente de verdad.
+4. `.local/sesiones-kiro/INDICE.md` si el tema coincide con una carpeta. Leer los hilos que correspondan.
+
+En la primera respuesta, listar esas rutas. Si un archivo no está, decirlo. No sustituir lo que no se leyó por un procedimiento nuevo.
+
+No existen `memory_recall`, `learn_list`, `search_chat_history` ni `spawn_run`. La memoria y las lecciones están en los archivos de arriba.
+
+| Dominio | Skill | Memoria |
+|---|---|---|
+| Azure / FinOps | `.cursor/skills/manage-azure-resources/SKILL.md`, `.cursor/skills/analyze-azure-costs/SKILL.md` | `.cursor/memories/azure-diagnoser`, `azure-operator`, `azure-reviewer`, `azure-finops-analyst` |
+| AKS | `.cursor/skills/manage-aks-clusters/SKILL.md` | `.cursor/memories/aks-diagnoser`, `aks-operator`, `aks-reviewer` |
+| Pipelines ADO | `.cursor/skills/manage-azure-devops-pipelines/SKILL.md` | `.cursor/memories/ado-pipeline-builder`, `ado-pipeline-diagnoser`, `ado-pipeline-reviewer` |
+| Permisos ADO | `.cursor/skills/manage-azure-devops-permissions/SKILL.md` | `.cursor/memories/ado-permissions-builder`, `ado-permissions-diagnoser`, `ado-permissions-reviewer` |
+| Cloudflare | `.cursor/skills/manage-cloudflare/SKILL.md` | `.cursor/memories/cloudflare-diagnoser`, `cloudflare-operator`, `cloudflare-reviewer` |
+| n8n | `.cursor/skills/manage-n8n-monitoring/SKILL.md` | `.cursor/memories/n8n-monitoring-diagnoser`, `n8n-monitoring-reviewer` |
+| Schema Sync | `.cursor/skills/manage-schema-sync-ssdt/SKILL.md` | `.cursor/memories/schema-sync-diagnoser`, `schema-sync-reviewer` |
+| Linux | `.cursor/skills/manage-linux-servers/SKILL.md` | `.cursor/memories/linux-server-diagnoser`, `linux-server-reviewer` |
+| Windows | `.cursor/skills/manage-windows-servers/SKILL.md` | `.cursor/memories/windows-server-diagnoser`, `windows-server-reviewer` |
+| Teams | `.cursor/skills/triage-teams-alerts/SKILL.md` | `.cursor/rules/teams-ops.mdc` |
+| Varios dominios a la vez | `.cursor/skills/orchestrate-application-pipeline-cycle/SKILL.md` | los de cada dominio involucrado |
+
+Una lectura (`kubectl get`, `az show`, un GET) puede hacerse para mirar el estado. El plan y cualquier cambio esperan a que el skill y la memoria estén leídos.

@@ -260,7 +260,20 @@ if ($isValid) {
             validatedAtUtc          = (Get-Date).ToUniversalTime().ToString('o')
             maxInventoryAgeHours    = [Math]::Min($MaxInventoryAgeHours, $script:AdoPermissionsAbsoluteMaxInventoryAgeHours)
         }) -Force
-    $hash = Get-AdoPermissionsPlanCanonicalHash -Plan $plan
+    # El validationHash DEBE calcularse sobre el plan tal como quedara EN
+    # DISCO (serializado y re-parseado), no sobre el objeto en memoria:
+    # ConvertTo-Json/ConvertFrom-Json coercionan tipos (ej. un timestamp
+    # 'o' ISO-8601 se re-emite en formato corto de cultura, un Int/Double
+    # cambia de forma) por lo que el hash del objeto en memoria difiere del
+    # que Apply-AdoPermissionsPlan.ps1 recomputa al leer el archivo. Se
+    # escribe primero sin hash, se relee, se hashea el objeto re-parseado y
+    # recien ahi se persiste el validationHash -- garantiza que Test y
+    # Apply calculen exactamente el mismo hash. (Bug real 2026-09-16:
+    # validationEvidence.validatedAtUtc se guardaba como DateTime corto en
+    # disco pero se hasheaba como string ISO en memoria.)
+    $plan | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $PlanPath -Encoding utf8
+    $planFromDisk = Get-Content -Raw -LiteralPath $PlanPath -Encoding UTF8 | ConvertFrom-Json
+    $hash = Get-AdoPermissionsPlanCanonicalHash -Plan $planFromDisk
     $plan | Add-Member -NotePropertyName validationHash -NotePropertyValue $hash -Force
 }
 else {

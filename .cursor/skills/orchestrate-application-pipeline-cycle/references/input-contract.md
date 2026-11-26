@@ -95,6 +95,7 @@ INPUT:
     production_requires_separate_approval
     allow_application_code_changes
     allow_deletions
+    agentic_mode                           # on|off — default lee .cursor/agentic-mode.json, fallback 'off'
 ```
 
 ## Modelo canónico sin export sanitizado todavía

@@ -1,0 +1,22 @@
+{
+  "agentic_run_id": "mod-ag-test-microservice-gateway-api-20260914-082512",
+  "app_id": "mod-ag-test-microservice-gateway-api",
+  "started_at": "2026-09-14T14:25:11Z",
+  "phase": "awaiting-build",
+  "input_hash": "b67a14cedade54bb",
+  "plan_validation_hash": "",
+  "ado": {
+    "build_id": null,
+    "release_definition_id": null,
+    "release_instance_dev": null,
+    "release_instance_uat": null
+  },
+  "last_observed": {
+    "domain": "phase-change",
+    "state": "awaiting-build",
+    "at": "2026-09-14T14:25:11Z"
+  },
+  "observations": [],
+  "outcome": "pending",
+  "error": ""
+}

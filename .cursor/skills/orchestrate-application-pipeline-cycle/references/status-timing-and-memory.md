@@ -98,4 +98,4 @@ completo):
 Nunca almacenar secretos, tokens, kubeconfigs ni valores sensibles en
 ninguna memoria. Un aprendizaje se guarda solo si es reutilizable en una
 conversación futura — no todo lo que ocurrió en la sesión amerita una
-memoria nueva (ver `.claude/rules/agent-memory.md`).
+memoria nueva (ver criterio de qué guardar en `.cursor/skills/` de este dominio).

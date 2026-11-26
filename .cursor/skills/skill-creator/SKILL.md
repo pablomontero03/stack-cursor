@@ -1,11 +1,17 @@
 ---
 name: skill-creator
-description: "Crea nuevas skills, modifica y mejora skills existentes, y mide el rendimiento de skills mediante evals y benchmarks. Triggers: nueva skill, crear skill, documentar procedimiento, skill creator."
+description: Crea nuevas skills, modifica y mejora skills existentes, y mide el rendimiento de skills mediante evals y benchmarks.
 triggers: [nueva skill, crear skill, documentar procedimiento, skill creator]
 always: false
 ---
 
 # Skill Creator
+
+> **Estado de madurez (Fase 3 — declarado 2026-09-11):** este skill es **meta**
+> (crea y mejora otros skills) y por su naturaleza no tiene maquinaria
+> plan/apply/test propia que tenga sentido automatizar. Opera directamente sobre
+> archivos SKILL.md, references/ y scripts/ de otros dominios. Esta decisión
+> es intencional y permanente — no es deuda técnica.
 
 A skill for creating new skills and iteratively improving them.
 

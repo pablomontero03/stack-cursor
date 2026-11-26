@@ -11,7 +11,7 @@ verifican leyendo el codigo real de los hooks en
 references/approval-envelope.md, no con un mock aqui.
 
 Uso:
-  powershell -NoProfile -ExecutionPolicy Bypass -File .\run-script-tests.ps1
+  pwsh -NoProfile -File .\run-script-tests.ps1
 #>
 
 $ErrorActionPreference = 'Stop'
@@ -171,6 +171,53 @@ $snapshotScriptSource = Get-Content -LiteralPath (Join-Path $scriptsRoot 'New-Ap
 $networkPattern = 'Invoke-WebRequest|Invoke-RestMethod|Invoke-AdoRest|Invoke-CloudflareApiRequest|kubectl|\bcall_az\b'
 Add-Result 'Escenario 18: Test-ApplicationCycleInput.ps1 no contiene ninguna llamada de red/kubectl' ($adoScriptSource -notmatch $networkPattern) 'grep de patrones de red'
 Add-Result 'Escenario 18: New-ApplicationCycleSnapshot.ps1 no contiene ninguna llamada de red/kubectl' ($snapshotScriptSource -notmatch $networkPattern) 'grep de patrones de red'
+
+# --- Escenarios 19-22: interruptor agentico (Fase 8 del roadmap) ---
+
+# 19: agentic_mode no declarado -> default 'off' (no modo agentico)
+try {
+    $inputNoAgentic = New-ValidInputHashtable
+    # Quitar agentic_mode si existia en el execution por algun default previo
+    $inputNoAgentic.INPUT.execution.Remove('agentic_mode') | Out-Null
+    $r19 = Test-ApplicationCycleInputObject -InputObject $inputNoAgentic
+    $gotOff = ($r19.normalized.execution.agentic_mode -eq 'off')
+    Add-Result 'Escenario 19: agentic_mode no declarado -> default off' ($r19.ok -eq $true -and $gotOff) "agentic_mode=$($r19.normalized.execution.agentic_mode)"
+}
+catch { Add-Result 'Escenario 19: agentic_mode no declarado -> default off' $false $_.Exception.Message }
+
+# 20: agentic_mode: "on" -> aceptado
+try {
+    $inputAgenticOn = New-ValidInputHashtable
+    $inputAgenticOn.INPUT.execution['agentic_mode'] = 'on'
+    $r20 = Test-ApplicationCycleInputObject -InputObject $inputAgenticOn
+    $gotOn = ($r20.normalized.execution.agentic_mode -eq 'on')
+    Add-Result 'Escenario 20: agentic_mode = "on" -> aceptado, ok=true' ($r20.ok -eq $true -and $gotOn) "agentic_mode=$($r20.normalized.execution.agentic_mode)"
+}
+catch { Add-Result 'Escenario 20: agentic_mode = "on" -> aceptado' $false $_.Exception.Message }
+
+# 21: agentic_mode: "invalid" -> rechazado con error
+try {
+    $inputAgenticInvalid = New-ValidInputHashtable
+    $inputAgenticInvalid.INPUT.execution['agentic_mode'] = 'invalid_value'
+    $r21 = Test-ApplicationCycleInputObject -InputObject $inputAgenticInvalid
+    $rejectedInvalid = ($r21.ok -eq $false -and ($r21.errors | Where-Object { $_ -match 'agentic_mode' }))
+    Add-Result 'Escenario 21: agentic_mode invalido -> rechazado con error' $rejectedInvalid ($r21.errors -join '; ')
+}
+catch { Add-Result 'Escenario 21: agentic_mode invalido -> rechazado con error' $false $_.Exception.Message }
+
+# 22: agentic_mode queda en el resultado normalizado listo para congelarse en el snapshot
+try {
+    $inputOnAndOff = New-ValidInputHashtable
+    $inputOnAndOff.INPUT.execution['agentic_mode'] = 'on'
+    $r22on = Test-ApplicationCycleInputObject -InputObject $inputOnAndOff
+    $inputOnAndOff.INPUT.execution['agentic_mode'] = 'off'
+    $r22off = Test-ApplicationCycleInputObject -InputObject $inputOnAndOff
+    $onIsOn = ($r22on.normalized.execution.agentic_mode -eq 'on')
+    $offIsOff = ($r22off.normalized.execution.agentic_mode -eq 'off')
+    $twoRunsDifferent = ($r22on.normalized.execution.agentic_mode -ne $r22off.normalized.execution.agentic_mode)
+    Add-Result 'Escenario 22: agentic_mode queda en normalized -> on/off son independientes' ($r22on.ok -and $r22off.ok -and $onIsOn -and $offIsOff -and $twoRunsDifferent) "on=$($r22on.normalized.execution.agentic_mode) off=$($r22off.normalized.execution.agentic_mode)"
+}
+catch { Add-Result 'Escenario 22: agentic_mode en normalized es independiente por corrida' $false $_.Exception.Message }
 
 # =========================================================================
 # Reporte final

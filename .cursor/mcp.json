@@ -18,13 +18,16 @@
       ],
       "env": {
         "ado_mcp_project": "DevOps"
-      }
+      },
+      "startupTimeoutSec": 180
     },
     "aks": {
       "command": "bash",
       "args": [
         ".cursor/mcp/with-env.sh",
         ".local/aks/tools/aks-mcp/v0.0.20/aks-mcp",
+        "--enabled-components",
+        "az_cli,monitor,fleet,network,compute,detectors,advisor,inspektorgadget,kubectl,helm",
         "--access-level",
         "admin",
         "--timeout",
@@ -36,26 +39,30 @@
         "USE_LEGACY_TOOLS": "false",
         "AKS_MCP_COLLECT_TELEMETRY": "false",
         "KUBECONFIG": "/home/cursor/stack-cursor/.local/kube/config",
-        "PATH": "/home/kiro/.local/bin:/usr/local/bin:/usr/bin:/bin"
-      }
+        "PATH": "/home/adoadmin/.local/bin:/usr/local/bin:/usr/bin:/bin"
+      },
+      "startupTimeoutSec": 60
     },
     "n8n-interno": {
       "command": "bash",
       "args": [
         ".cursor/mcp/run-n8n-interno.sh"
-      ]
+      ],
+      "startupTimeoutSec": 180
     },
     "n8n-productivo": {
       "command": "bash",
       "args": [
         ".cursor/mcp/run-n8n-productivo.sh"
-      ]
+      ],
+      "startupTimeoutSec": 180
     },
     "cloudflare-api": {
-      "url": "https://mcp.cloudflare.com/mcp",
-      "env": {
-        "CLOUDFLARE_API_TOKEN": "${env:CLOUDFLARE_API_TOKEN}"
-      }
+      "command": "bash",
+      "args": [
+        ".cursor/mcp/run-cloudflare.sh"
+      ],
+      "startupTimeoutSec": 180
     }
   }
 }

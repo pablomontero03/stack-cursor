@@ -22,14 +22,25 @@ Igual que en el archivo global: toda BD es solo lectura desde este flujo. Solo s
 - Una sola BD por vez. Confirmar el nombre real antes de ejecutar.
 - `schema-sync/databases.json` es la fuente de verdad del catálogo — no asumir que `database`, `repoName` y `projectName` son iguales.
 - No ejecutar `run-batch.sh --execute` salvo solicitud explícita.
-- No ejecutar `ScHmSyNcOrCh0001` salvo solicitud explícita, dry-run previo y aprobación separada de alto riesgo.
-- No habilitar schedules ni workflows automáticamente.
+- No ejecutar manualmente un orquestador fuera de su schedule salvo solicitud explícita.
+- No habilitar schedules, workflows ni bases nuevas automáticamente: cada activación o `enabled=true` requiere aprobación y piloto previo.
 
-## Orquestador multi-BD `ScHmSyNcOrCh0001`
+## Orquestadores multi-BD (DOS flujos en espejo)
 
-- Solo lectura por defecto, `do_not_auto_run=true`.
-- Requiere: solicitud específica, lista exacta de bases, dry-run previo, y aprobación separada de alto riesgo.
-- No se ejecuta como efecto colateral de aprobar una sola BD.
+Estado real verificado en vivo el 2026-11-09. Ambos viven en `n8n-interno` y **ejecutan sync real** (Extract read-only, push a `main` del repo, PR `main`→`release` sin autocomplete).
+
+| Flujo | Id | Alcance | Schedule (CR) | Estado |
+|---|---|---|---|---|
+| Núcleo | `ScHmSyNcOrCh0001` | `core_*`, `da_*`, bundle core-workflow-global, ops, sds/stg_blue, buklo_lab (21 enabled) | Dom–Vie 19:00 | activo, `do_not_auto_run=false` |
+| Negocio + Staging | `F9RXPgIJQ7QzZ15q` (orquestador 2) | 28 en catálogo, 18 enabled | Dom–Vie 20:30 | activo desde 2026-11-09, `do_not_auto_run=false` |
+
+- **Espejo:** todo mantenimiento o mejora del grafo/nodos/lógica se aplica a los DOS flujos. Respaldar ambos antes de tocar (`.local/schema-sync/backups/`).
+- Cada base nueva entra con `enabled=false`, se pilotea y solo pasa a `enabled=true` si `status=success` y `buildOk=true`.
+- **Bases `heavy`** (`stg_hana`, `stg_hana_nomed`, `SOFTLAND`): el Compare live tarda >40 min por base y crashea el ciclo CLI. Quedan `enabled=false`, `heavy=true`, `run_heavy=false`. Procesarlas solo por vía DACPAC + CommandTimeout alto.
+- El `result.json` por base lo sobrescribe cualquier corrida concurrente: confirmar el éxito por la ejecución n8n, no solo por el JSON en disco.
+- El gate `do_not_auto_run` sigue existiendo: ponerlo en `true` detiene un orquestador sin desactivarlo.
+- **Fase 2 (desde 2026-11-09, opt-in en `/home/soporte/schema-sync/reconcile-enabled.txt`):** `main` = BD de prod vía Extract read-only (`ExtractTarget=SchemaObjectType`) + `reconcile-from-extract.py` + compilación en el .60 + push a `main` siempre. Conservar el fin de línea del Extract (CRLF en módulos). Verificar con DeployReport dacpac-proyecto vs dacpac-prod, no solo con la reconciliación. Sumar bases solo tras probarlas en copia. Detalle: `docs/schema-sync/FASE2-RECONCILE-FROM-EXTRACT.md`.
+- Push directo a `main`: requiere "Bypass policies when pushing" de `pmontero` en `refs/heads/main` (46 repos). Sin él, ADO rechaza con `TF402455`.
 
 ## Bases nuevas y cascarón SSDT
 
@@ -46,3 +57,5 @@ Igual que en el archivo global: toda BD es solo lectura desde este flujo. Solo s
 - Cotidiano: `schema-sync/README.md`
 - Historia: `schema-sync/CONTEXTO-COMPLETO.md`
 - Skill: `.cursor/skills/manage-schema-sync-ssdt/SKILL.md`
+
+- **Validadas con Schema Compare de VS (2026-11-12):** `core_job_schedule`, `stg_blue`, `core_global`, `core_workflow`, `core_config`, `buklo_lab` coinciden con el Orquestador; sus pipelines ya se usan en UAT y Prod.
